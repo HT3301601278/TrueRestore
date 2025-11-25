@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>真迹还原系统</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script type="importmap">
+        {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.294.0"
+        }
+    }
+    </script>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, RefreshCw, ArrowUp, ArrowDown, Feather, PenTool, Sliders, Undo, Trash2, ZoomIn, Upload, FileText, X } from 'lucide-react';
+
+        const parseSvgFile = (svgContent) => {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(svgContent, 'image/svg+xml');
+
+            const svgElement = doc.querySelector('svg');
+            const viewBox = svgElement?.getAttribute('viewBox');
+            const width = svgElement?.getAttribute('width');
+            const height = svgElement?.getAttribute('height');
+
+            const pathElements = doc.querySelectorAll('path');
+            const paths = [];
+
+            pathElements.forEach((pathEl, index) => {
+                const d = pathEl.getAttribute('d');
+                const id = pathEl.getAttribute('id') || String(index);
+
+                if (d) {
+                    paths.push({
+                        id,
+                        name: `笔画 ${String.fromCharCode(65 + index)}`,
+                        color: '#000000',
+                        d
+                    });
+                }
+            });
+
+            return { paths, viewBox, width, height };
+        };
+
+        const calculateFocusViewBox = (d, fallbackViewBox) => {
+            const numbers = d.match(/[-+]?[0-9]*\.?[0-9]+/g)?.map(Number);
+            if (!numbers || numbers.length === 0) return fallbackViewBox || '';
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            for (let i = 0; i < numbers.length; i += 2) {
+                if (i + 1 >= numbers.length) break;
+
+                const x = numbers[i];
+                const y = numbers[i + 1];
+
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+
+            const width = maxX - minX;
+            const height = maxY - minY;
+
+            const padding = Math.max(width, height) * 0.2;
+
+            return `${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`;
+        };
+
+        const AnimatedPath = ({ d, color, isPlaying, totalDurationPerPath, delay, id, isHovered, onHover, onLeave, recordedStrokeData }) => {
+            const strokeRef = useRef(null);
+            const [strokeLength, setStrokeLength] = useState(0);
+
+            const strokePath = recordedStrokeData?.d;
+            const strokeWidth = recordedStrokeData?.width || 8;
+
+            useEffect(() => {
+                if (strokeRef.current) {
+                    setStrokeLength(strokeRef.current.getTotalLength());
+                }
+            }, [strokePath]);
+
+            const maskId = `mask-${id}`;
+
+            if (strokePath) {
+                return React.createElement('g', null,
+                    React.createElement('defs', null,
+                        React.createElement('mask', { id: maskId, maskUnits: 'userSpaceOnUse' },
+                            React.createElement('path', {
+                                ref: strokeRef,
+                                d: strokePath,
+                                stroke: 'white',
+                                strokeWidth: strokeWidth,
+                                strokeLinecap: 'round',
+                                strokeLinejoin: 'round',
+                                fill: 'none',
+                                strokeDasharray: strokeLength,
+                                strokeDashoffset: isPlaying ? strokeLength : 0,
+                                style: {
+                                    animation: isPlaying ? `dash ${totalDurationPerPath}ms ease-out forwards` : 'none',
+                                    animationDelay: `${delay}ms`,
+                                    animationFillMode: 'forwards'
+                                }
+                            })
+                        )
+                    ),
+                    React.createElement('path', {
+                        d: d,
+                        fill: color,
+                        mask: `url(#${maskId})`,
+                        onMouseEnter: () => onHover(id),
+                        onMouseLeave: onLeave,
+                        style: {
+                            cursor: 'pointer',
+                            opacity: 1,
+                        }
+                    }),
+                    isHovered && !isPlaying && React.createElement('path', {
+                        d: strokePath,
+                        stroke: 'red',
+                        strokeWidth: 1,
+                        fill: 'none',
+                        opacity: '0.3'
+                    })
+                );
+            }
+
+            return React.createElement('path', {
+                d: d,
+                fill: color,
+                style: {
+                    opacity: 0,
+                    animation: isPlaying ? `fadeIn ${totalDurationPerPath}ms ease-out forwards` : 'none',
+                    animationDelay: `${delay}ms`,
+                    animationFillMode: 'forwards'
+                }
+            });
+        };
+
+        function App() {
+            const [paths, setPaths] = useState([]);
+            const [recordedStrokes, setRecordedStrokes] = useState({});
+
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [animationKey, setAnimationKey] = useState(0);
+            const [hoveredId, setHoveredId] = useState(null);
+
+            const [svgInfo, setSvgInfo] = useState({ viewBox: null, width: null, height: null });
+            const [uploadedFileName, setUploadedFileName] = useState('');
+
+            const [recordingId, setRecordingId] = useState(null);
+            const [recordingViewBox, setRecordingViewBox] = useState(null);
+            const [brushSize, setBrushSize] = useState(8);
+
+            const fileInputRef = useRef(null);
+
+            const [draftPathSegments, setDraftPathSegments] = useState([]);
+            const [activeStrokePoints, setActiveStrokePoints] = useState([]);
+            const [isDrawing, setIsDrawing] = useState(false);
+
+            const svgRef = useRef(null);
+
+            const DURATION_PER_PATH = 1000;
+            const DELAY_BETWEEN = 200;
+
+            const handleFileUpload = (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const content = e.target?.result;
+                    if (typeof content === 'string') {
+                        const { paths: parsedPaths, viewBox, width, height } = parseSvgFile(content);
+                        if (parsedPaths.length > 0) {
+                            setPaths(parsedPaths);
+                            setSvgInfo({ viewBox, width, height });
+                            setUploadedFileName(file.name);
+                            setRecordedStrokes({});
+                            setIsPlaying(false);
+                        } else {
+                            alert('未能从文件中解析出路径数据，请确保上传的是有效的 SVG 文件。');
+                        }
+                    }
+                };
+                reader.readAsText(file);
+
+                event.target.value = '';
+            };
+
+            const clearUploadedFile = () => {
+                setPaths([]);
+                setSvgInfo({ viewBox: null, width: null, height: null });
+                setUploadedFileName('');
+                setRecordedStrokes({});
+                setIsPlaying(false);
+            };
+
+            const startRecording = (id) => {
+                setRecordingId(id);
+                setDraftPathSegments([]);
+                setActiveStrokePoints([]);
+                setIsDrawing(false);
+
+                const targetPath = paths.find(p => p.id === id);
+                if (targetPath) {
+                    const focusedViewBox = calculateFocusViewBox(targetPath.d, svgInfo.viewBox);
+                    setRecordingViewBox(focusedViewBox);
+                }
+
+                const prev = recordedStrokes[id];
+                if (prev && prev.width) {
+                    setBrushSize(prev.width);
+                } else {
+                    setBrushSize(8);
+                }
+                setIsPlaying(false);
+            };
+
+            const cancelRecording = () => {
+                setRecordingId(null);
+                setDraftPathSegments([]);
+                setActiveStrokePoints([]);
+                setIsDrawing(false);
+                setRecordingViewBox(null);
+            };
+
+            const undoLastStroke = () => {
+                setDraftPathSegments(prev => prev.slice(0, -1));
+            };
+
+            const clearRecording = () => {
+                setDraftPathSegments([]);
+            };
+
+            const saveRecording = () => {
+                const fullPath = draftPathSegments.join(" ");
+                if (!fullPath.trim()) return;
+
+                setRecordedStrokes(prev => ({
+                    ...prev,
+                    [recordingId]: { d: fullPath, width: brushSize }
+                }));
+                setRecordingId(null);
+                setDraftPathSegments([]);
+                setActiveStrokePoints([]);
+            };
+
+            const getRelativeCoordinates = (e) => {
+                const svg = svgRef.current;
+                const pt = svg.createSVGPoint();
+                pt.x = e.clientX;
+                pt.y = e.clientY;
+                const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+                return [Number(svgP.x.toFixed(2)), Number(svgP.y.toFixed(2))];
+            };
+
+            const handleSvgPointerDown = (e) => {
+                if (!recordingId || !svgRef.current) return;
+                e.target.setPointerCapture(e.pointerId);
+                setIsDrawing(true);
+                const pt = getRelativeCoordinates(e);
+                setActiveStrokePoints([pt]);
+            };
+
+            const handleSvgPointerMove = (e) => {
+                if (!recordingId || !svgRef.current || !isDrawing) return;
+                const pt = getRelativeCoordinates(e);
+                setActiveStrokePoints(prev => [...prev, pt]);
+            };
+
+            const handleSvgPointerUp = (e) => {
+                if (!recordingId || !isDrawing) return;
+                setIsDrawing(false);
+                e.target.releasePointerCapture(e.pointerId);
+
+                if (activeStrokePoints.length > 1) {
+                    const d = activeStrokePoints.reduce((acc, point, i) => {
+                        return acc + (i === 0 ? `M ${point[0]} ${point[1]}` : ` L ${point[0]} ${point[1]}`);
+                    }, "");
+                    setDraftPathSegments(prev => [...prev, d]);
+                }
+                setActiveStrokePoints([]);
+            };
+
+            const activeStrokeString = activeStrokePoints.length > 0
+                ? activeStrokePoints.reduce((acc, point, i) => acc + (i === 0 ? `M ${point[0]} ${point[1]}` : ` L ${point[0]} ${point[1]}`), "")
+                : "";
+
+            const handleReorder = (index, direction) => {
+                if (isPlaying) return;
+                const newPaths = [...paths];
+                if (direction === 'up' && index > 0) {
+                    [newPaths[index], newPaths[index - 1]] = [newPaths[index - 1], newPaths[index]];
+                } else if (direction === 'down' && index < newPaths.length - 1) {
+                    [newPaths[index], newPaths[index + 1]] = [newPaths[index + 1], newPaths[index]];
+                }
+                setPaths(newPaths);
+            };
+
+            const handlePlay = () => {
+                setIsPlaying(false);
+                setTimeout(() => {
+                    setAnimationKey(k => k + 1);
+                    setIsPlaying(true);
+                }, 50);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                    const totalTime = paths.length * (DURATION_PER_PATH + DELAY_BETWEEN);
+                    const timer = setTimeout(() => {
+                        setIsPlaying(false);
+                    }, totalTime + 500);
+                    return () => clearTimeout(timer);
+                }
+            }, [isPlaying, paths]);
+
+            const h = React.createElement;
+
+            return h('div', { className: "flex flex-col items-center justify-center min-h-screen bg-stone-100 p-4 font-sans text-stone-800 select-none" },
+                h('style', null, `
+                    @keyframes dash { to { stroke-dashoffset: 0; } }
+                    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+                `),
+
+                recordingId && h('div', { className: "fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center backdrop-blur-sm" },
+                    h('div', { className: "bg-white p-6 rounded-2xl shadow-2xl max-w-lg w-full" },
+                        h('div', { className: "flex justify-between items-center mb-4" },
+                            h('h3', { className: "text-xl font-bold flex items-center gap-2" },
+                                h(ZoomIn, { className: "text-indigo-500" }),
+                                `聚焦录制: ${paths.find(p => p.id === recordingId)?.name}`
+                            ),
+                            h('div', { className: "space-x-2 flex" },
+                                h('button', { onClick: undoLastStroke, disabled: draftPathSegments.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30", title: "撤销上一笔" },
+                                    h(Undo, { size: 18 })
+                                ),
+                                h('button', { onClick: clearRecording, disabled: draftPathSegments.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30", title: "清空所有" },
+                                    h(Trash2, { size: 18 })
+                                ),
+                                h('div', { className: "w-px h-6 bg-slate-200 mx-1" }),
+                                h('button', { onClick: cancelRecording, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded" }, "取消"),
+                                h('button', { onClick: saveRecording, className: "px-4 py-1 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold" }, "保存笔迹")
+                            )
+                        ),
+
+                        h('div', { className: "mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-center gap-4" },
+                            h('div', { className: "flex items-center gap-2 w-full" },
+                                h('label', { className: "text-xs font-bold text-slate-500 uppercase flex items-center gap-1 shrink-0" },
+                                    h(Sliders, { size: 12 }), " 笔刷粗细"
+                                ),
+                                h('input', {
+                                    type: "range",
+                                    min: "2",
+                                    max: "40",
+                                    step: "1",
+                                    value: brushSize,
+                                    onChange: (e) => setBrushSize(parseInt(e.target.value)),
+                                    className: "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                }),
+                                h('span', { className: "text-xs font-mono bg-white px-2 rounded border w-12 text-center" }, `${brushSize}px`)
+                            )
+                        ),
+
+                        h('div', { className: "text-sm text-slate-500 mb-4" },
+                            h('b', null, "已自动放大视图："), " 请像平时写字一样，在字母上方书写。",
+                            h('ul', { className: "list-disc list-inside text-xs mt-1 space-y-1" },
+                                h('li', null, "按下鼠标 = 开始写一笔"),
+                                h('li', null, "松开鼠标 = 结束当前笔画")
+                            )
+                        ),
+
+                        h('div', { className: "border-2 border-dashed border-indigo-200 rounded-xl bg-white flex justify-center p-0 cursor-crosshair relative overflow-hidden h-[300px]" },
+                            h('svg', {
+                                ref: svgRef,
+                                viewBox: recordingViewBox,
+                                width: "100%",
+                                height: "100%",
+                                preserveAspectRatio: "xMidYMid meet",
+                                className: "overflow-visible touch-none",
+                                style: { background: '#f8fafc' },
+                                onPointerDown: handleSvgPointerDown,
+                                onPointerMove: handleSvgPointerMove,
+                                onPointerUp: handleSvgPointerUp,
+                                onPointerLeave: handleSvgPointerUp
+                            },
+                                h('path', {
+                                    d: paths.find(p => p.id === recordingId)?.d,
+                                    fill: "#1f2937",
+                                    opacity: "0.8"
+                                }),
+                                draftPathSegments.map((seg, i) =>
+                                    h('path', {
+                                        key: i,
+                                        d: seg,
+                                        fill: "none",
+                                        stroke: "rgba(239, 68, 68, 0.4)",
+                                        strokeWidth: brushSize,
+                                        strokeLinecap: "round",
+                                        strokeLinejoin: "round"
+                                    })
+                                ),
+                                isDrawing && h('path', {
+                                    d: activeStrokeString,
+                                    fill: "none",
+                                    stroke: "rgba(239, 68, 68, 0.6)",
+                                    strokeWidth: brushSize,
+                                    strokeLinecap: "round",
+                                    strokeLinejoin: "round"
+                                }),
+                                draftPathSegments.map((seg, i) =>
+                                    h('path', { key: `guide-${i}`, d: seg, fill: "none", stroke: "red", strokeWidth: "0.5", strokeOpacity: "0.5" })
+                                ),
+                                isDrawing && h('path', { d: activeStrokeString, fill: "none", stroke: "red", strokeWidth: "0.5", strokeOpacity: "0.8" })
+                            )
+                        )
+                    )
+                ),
+
+                h('div', { className: "max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-8" },
+                    h('div', { className: "bg-white rounded-2xl shadow-xl p-6 border border-stone-200 flex flex-col h-full" },
+                        h('div', { className: "flex items-center justify-between mb-6" },
+                            h('h2', { className: "text-2xl font-serif font-bold text-stone-800 flex items-center gap-2" },
+                                h(Feather, { className: "w-6 h-6 text-stone-600" }),
+                                "真迹还原系统"
+                            )
+                        ),
+
+                        h('div', { className: "mb-6" },
+                            h('input', {
+                                ref: fileInputRef,
+                                type: "file",
+                                accept: ".svg,.txt",
+                                onChange: handleFileUpload,
+                                className: "hidden"
+                            }),
+
+                            paths.length === 0 ?
+                                h('div', {
+                                    onClick: () => fileInputRef.current?.click(),
+                                    className: "border-2 border-dashed border-indigo-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/50 transition-all group"
+                                },
+                                    h(Upload, { className: "w-12 h-12 mx-auto mb-3 text-indigo-400 group-hover:text-indigo-600 transition-colors" }),
+                                    h('p', { className: "text-stone-600 font-medium" }, "点击上传 SVG 文件"),
+                                    h('p', { className: "text-stone-400 text-sm mt-1" }, "支持 .svg 或 .txt 格式")
+                                ) :
+                                h('div', { className: "bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between" },
+                                    h('div', { className: "flex items-center gap-3" },
+                                        h('div', { className: "w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center" },
+                                            h(FileText, { className: "w-5 h-5 text-green-600" })
+                                        ),
+                                        h('div', null,
+                                            h('p', { className: "text-sm font-medium text-green-800" }, uploadedFileName),
+                                            h('p', { className: "text-xs text-green-600" }, `已加载 ${paths.length} 个笔画`)
+                                        )
+                                    ),
+                                    h('div', { className: "flex gap-2" },
+                                        h('button', {
+                                            onClick: () => fileInputRef.current?.click(),
+                                            className: "px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors"
+                                        }, "更换文件"),
+                                        h('button', {
+                                            onClick: clearUploadedFile,
+                                            className: "p-1.5 text-green-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                        },
+                                            h(X, { size: 18 })
+                                        )
+                                    )
+                                )
+                        ),
+
+                        h('div', { className: "flex-1 overflow-y-auto pr-2" },
+                            paths.length > 0 && h(React.Fragment, null,
+                                h('div', { className: "flex justify-between items-end mb-2" },
+                                    h('h3', { className: "text-xs font-bold text-stone-500 uppercase tracking-wider" }, "字形列表 & 录制"),
+                                    h('span', { className: "text-xs text-stone-400" }, `已录制: ${Object.keys(recordedStrokes).length} / ${paths.length}`)
+                                ),
+                                h('div', { className: "space-y-3 mb-8" },
+                                    paths.map((path, index) => {
+                                        const hasRecording = !!recordedStrokes[path.id];
+                                        return h('div', {
+                                            key: path.id,
+                                            className: `flex items-center justify-between p-3 rounded-xl border transition-all ${hoveredId === path.id ? 'border-stone-400 bg-stone-100 shadow-md' : 'border-stone-100 bg-white hover:border-stone-300'}`,
+                                            onMouseEnter: () => setHoveredId(path.id),
+                                            onMouseLeave: () => setHoveredId(null)
+                                        },
+                                            h('div', { className: "flex items-center space-x-3" },
+                                                h('div', { className: `w-8 h-8 rounded-full flex items-center justify-center font-serif font-bold text-sm text-white ${hasRecording ? 'bg-green-500' : 'bg-stone-300'}` },
+                                                    hasRecording ? '✓' : String.fromCharCode(65 + index)
+                                                ),
+                                                h('div', { className: "flex flex-col" },
+                                                    h('span', { className: "font-medium text-stone-700 font-serif" }, path.name),
+                                                    h('span', { className: "text-[10px] text-stone-400" }, hasRecording ? '已就绪' : '等待录制...')
+                                                )
+                                            ),
+                                            h('div', { className: "flex items-center space-x-2" },
+                                                h('button', {
+                                                    onClick: () => startRecording(path.id),
+                                                    className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors ${hasRecording ? 'bg-white border border-stone-200 text-stone-600 hover:bg-stone-50' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200'}`
+                                                },
+                                                    h(PenTool, { size: 12 }),
+                                                    hasRecording ? '重录' : '录制'
+                                                ),
+                                                h('div', { className: "w-px h-6 bg-stone-200 mx-1" }),
+                                                h('button', {
+                                                    onClick: () => handleReorder(index, 'up'),
+                                                    disabled: index === 0 || isPlaying,
+                                                    className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500"
+                                                },
+                                                    h(ArrowUp, { size: 14 })
+                                                ),
+                                                h('button', {
+                                                    onClick: () => handleReorder(index, 'down'),
+                                                    disabled: index === paths.length - 1 || isPlaying,
+                                                    className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500"
+                                                },
+                                                    h(ArrowDown, { size: 14 })
+                                                )
+                                            )
+                                        );
+                                    })
+                                )
+                            ),
+                            paths.length === 0 && h('div', { className: "flex-1 flex items-center justify-center text-stone-400 text-center py-12" },
+                                h('p', null, "请先上传 SVG 文件", h('br'), "以加载字形数据")
+                            )
+                        ),
+
+                        h('div', { className: "mt-auto pt-6 border-t border-stone-200" },
+                            h('button', {
+                                onClick: handlePlay,
+                                disabled: isPlaying || paths.length === 0,
+                                className: `w-full flex items-center justify-center py-4 px-6 rounded-xl font-bold text-white transition-all transform active:scale-[0.99] ${isPlaying || paths.length === 0 ? 'bg-stone-400 cursor-not-allowed' : Object.keys(recordedStrokes).length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-indigo-500/30' : 'bg-stone-800 hover:bg-black'}`
+                            },
+                                isPlaying ?
+                                    h(React.Fragment, null, h(RefreshCw, { className: "animate-spin mr-2", size: 20 }), "书写中...") :
+                                    paths.length === 0 ?
+                                        h(React.Fragment, null, h(Upload, { className: "mr-2", size: 20 }), "请先上传 SVG 文件") :
+                                        h(React.Fragment, null, h(Play, { className: "mr-2 fill-current", size: 20 }), Object.keys(recordedStrokes).length === 0 ? '请先录制笔迹' : '播放书写动画')
+                            )
+                        )
+                    ),
+
+                    h('div', { className: "bg-[#f5f5f4] rounded-2xl shadow-inner flex flex-col items-center justify-center p-8 relative overflow-hidden border border-stone-300 min-h-[400px]" },
+                        h('div', {
+                            className: "absolute inset-0 opacity-40 pointer-events-none mix-blend-multiply",
+                            style: { backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E")` }
+                        }),
+
+                        paths.length === 0 ?
+                            h('div', { className: "relative z-10 text-center text-stone-400" },
+                                h(Upload, { className: "w-16 h-16 mx-auto mb-4 opacity-30" }),
+                                h('p', { className: "text-lg font-medium" }, "等待加载字形"),
+                                h('p', { className: "text-sm mt-2" }, "上传 SVG 文件后将在此处显示预览")
+                            ) :
+                            h('div', { className: "relative z-10 p-12 transition-all duration-500 transform scale-125" },
+                                h('svg', {
+                                    width: parseFloat(svgInfo.width) * 2,
+                                    height: parseFloat(svgInfo.height) * 2,
+                                    viewBox: svgInfo.viewBox,
+                                    className: "overflow-visible",
+                                    style: { maxWidth: '100%', height: 'auto' }
+                                },
+                                    h('g', { key: `fills-${animationKey}` },
+                                        paths.map((path, index) =>
+                                            h(AnimatedPath, {
+                                                key: path.id,
+                                                ...path,
+                                                recordedStrokeData: recordedStrokes[path.id],
+                                                delay: index * (DURATION_PER_PATH + DELAY_BETWEEN),
+                                                totalDurationPerPath: DURATION_PER_PATH,
+                                                isPlaying: isPlaying,
+                                                isHovered: hoveredId === path.id,
+                                                onHover: setHoveredId,
+                                                onLeave: () => setHoveredId(null)
+                                            })
+                                        )
+                                    )
+                                )
+                            )
+                    )
+                )
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
+    </script>
+</body>
+
+</html>
