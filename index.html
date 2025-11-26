@@ -195,6 +195,11 @@
         const strokePath = recordedStrokeData?.d;
         const strokeWidth = recordedStrokeData?.width || 8;
 
+        const displayColor = isHovered ? "#ef4444" : color;
+
+        const isVisible =
+          status === "completed" || status === "idle" || isHovered;
+
         useEffect(() => {
           if (strokeRef.current)
             setStrokeLength(strokeRef.current.getTotalLength());
@@ -221,12 +226,8 @@
                   strokeLinejoin: "round",
                   fill: "none",
                   strokeDasharray: strokeLength,
-                  strokeDashoffset:
-                    status === "completed"
-                      ? 0
-                      : status === "waiting"
-                      ? strokeLength
-                      : strokeLength,
+
+                  strokeDashoffset: isVisible ? 0 : strokeLength,
                   style: {
                     animation:
                       status === "animating"
@@ -239,13 +240,15 @@
             ),
             React.createElement("path", {
               d: d,
-              fill: color,
+              fill: displayColor,
               mask: `url(#${maskId})`,
               onMouseEnter: () => onHover(id),
               onMouseLeave: onLeave,
               style: {
                 cursor: "pointer",
-                opacity: status === "waiting" ? 0 : 1,
+
+                opacity: status === "waiting" && !isHovered ? 0 : 1,
+                transition: "fill 0.2s, opacity 0.3s",
               },
             }),
             isHovered &&
@@ -262,14 +265,17 @@
 
         return React.createElement("path", {
           d: d,
-          fill: color,
+          fill: displayColor,
+          onMouseEnter: () => onHover(id),
+          onMouseLeave: onLeave,
           style: {
-            opacity: status === "completed" ? 1 : 0,
+            opacity: isVisible ? 1 : 0,
             animation:
               status === "animating"
                 ? `fadeIn ${totalDurationPerPath}ms ease-out forwards`
                 : "none",
             animationPlayState: isPaused ? "paused" : "running",
+            transition: "fill 0.2s, opacity 0.3s",
           },
         });
       };
@@ -1533,10 +1539,15 @@
                         null,
                         paths.map((path, index) => {
                           let status = "waiting";
-                          if (index < currentStep) status = "completed";
-                          else if (index === currentStep) status = "animating";
 
-                          if (currentStep === -1) status = "waiting";
+                          if (currentStep === -1) {
+                            status = "idle";
+                          } else {
+                            if (index < currentStep) status = "completed";
+                            else if (index === currentStep)
+                              status = "animating";
+                            else status = "waiting";
+                          }
 
                           return h(AnimatedPath, {
                             key: path.id,
