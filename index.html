@@ -220,9 +220,7 @@
           if (strokeRef.current)
             setStrokeLength(strokeRef.current.getTotalLength());
         }, [strokePath]);
-
         const maskId = `mask-${id}`;
-
         if (strokePath) {
           return React.createElement(
             "g",
@@ -661,7 +659,6 @@
             d: dStr,
             splitColor: distinctColors[idx],
           }));
-
           setSplittingId(pathId);
           setSplitDraft(initialSplitDraft);
           setSelectedSplitIds([]);
@@ -791,7 +788,6 @@
                   className:
                     "bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden",
                 },
-
                 h(
                   "div",
                   {
@@ -810,7 +806,6 @@
                       h(Scissors, { size: 20 }),
                       "拆分与排序"
                     ),
-
                     h(
                       "button",
                       {
@@ -853,7 +848,6 @@
                 h(
                   "div",
                   { className: "flex-1 flex overflow-hidden" },
-
                   h(
                     "div",
                     {

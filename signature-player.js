@@ -30,7 +30,6 @@ const AnimatedPath = ({
   const strokeRef = useRef(null);
   const [len, setLen] = useState(0);
   const maskId = useId();
-
   const maskPath = recordedStrokeData?.d;
   const maskWidth = recordedStrokeData?.width || 12;
 
@@ -137,7 +136,6 @@ const SignaturePlayer = ({ jsonUrl }) => {
     if (!data) return;
     let timer;
     const total = data.paths.length;
-
     const nextTick = () => {
       if (direction === 1) {
         // --- 正向书写 ---
