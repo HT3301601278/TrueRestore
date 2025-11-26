@@ -118,9 +118,19 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(svgContent, "image/svg+xml");
         const svgElement = doc.querySelector("svg");
-        const viewBox = svgElement?.getAttribute("viewBox");
+
+        let viewBox = svgElement?.getAttribute("viewBox");
         const width = svgElement?.getAttribute("width");
         const height = svgElement?.getAttribute("height");
+
+        if (!viewBox && width && height) {
+          const w = parseFloat(width);
+          const h = parseFloat(height);
+          if (!isNaN(w) && !isNaN(h)) {
+            viewBox = `0 0 ${w} ${h}`;
+          }
+        }
+
         const pathElements = doc.querySelectorAll("path");
         const paths = [];
         pathElements.forEach((pathEl, index) => {
@@ -1633,20 +1643,19 @@
                     "div",
                     {
                       className:
-                        "relative z-10 p-12 transition-all duration-500 transform scale-125 w-full h-full flex items-center justify-center",
+                        "relative z-10 p-4 w-full h-full flex items-center justify-center",
                     },
                     h(
                       "svg",
                       {
-                        width: parseFloat(svgInfo.width) * 2,
-                        height: parseFloat(svgInfo.height) * 2,
+                        width: "100%",
+                        height: "100%",
                         viewBox: svgInfo.viewBox,
+                        preserveAspectRatio: "xMidYMid meet",
                         className: "overflow-visible",
                         style: {
                           maxWidth: "100%",
                           maxHeight: "100%",
-                          width: "auto",
-                          height: "auto",
                         },
                       },
                       h(
