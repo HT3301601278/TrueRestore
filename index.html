@@ -96,21 +96,28 @@
         }
       };
 
-      const getSmoothPath = (points) => {
-        if (points.length === 0) return "";
-        if (points.length === 1) return `M ${points[0][0]} ${points[0][1]}`;
-        if (points.length === 2)
-          return `M ${points[0][0]} ${points[0][1]} L ${points[1][0]} ${points[1][1]}`;
+      const getSvgPathFromStroke = (points, close = false) => {
+        const len = points.length;
+        if (len < 1) return "";
+        if (len < 2) return `M ${points[0][0]} ${points[0][1]}`;
+        const sub = (p1, p2) => [p1[0] - p2[0], p1[1] - p2[1]];
+        const add = (p1, p2) => [p1[0] + p2[0], p1[1] + p2[1]];
+        const mul = (p, s) => [p[0] * s, p[1] * s];
+        const k = 1;
         let d = `M ${points[0][0]} ${points[0][1]}`;
-        for (let i = 1; i < points.length - 1; i++) {
+        for (let i = 0; i < len - 1; i++) {
+          const p0 = i > 0 ? points[i - 1] : points[0];
           const p1 = points[i];
-          const nextP = points[i + 1];
-          const endX = (p1[0] + nextP[0]) / 2;
-          const endY = (p1[1] + nextP[1]) / 2;
-          d += ` Q ${p1[0]} ${p1[1]} ${endX} ${endY}`;
+          const p2 = points[i + 1];
+          const p3 = i < len - 2 ? points[i + 2] : p2;
+          const cp1 = add(p1, mul(sub(p2, p0), k / 6));
+          const cp2 = sub(p2, mul(sub(p3, p1), k / 6));
+
+          d += ` C ${cp1[0].toFixed(2)} ${cp1[1].toFixed(2)}, ${cp2[0].toFixed(
+            2
+          )} ${cp2[1].toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
         }
-        const last = points[points.length - 1];
-        d += ` L ${last[0]} ${last[1]}`;
+        if (close) d += " Z";
         return d;
       };
 
@@ -118,11 +125,9 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(svgContent, "image/svg+xml");
         const svgElement = doc.querySelector("svg");
-
         let viewBox = svgElement?.getAttribute("viewBox");
         const width = svgElement?.getAttribute("width");
         const height = svgElement?.getAttribute("height");
-
         if (!viewBox && width && height) {
           const w = parseFloat(width);
           const h = parseFloat(height);
@@ -130,7 +135,6 @@
             viewBox = `0 0 ${w} ${h}`;
           }
         }
-
         const pathElements = doc.querySelectorAll("path");
         const paths = [];
         pathElements.forEach((pathEl, index) => {
@@ -209,12 +213,9 @@
         const [strokeLength, setStrokeLength] = useState(0);
         const strokePath = recordedStrokeData?.d;
         const strokeWidth = recordedStrokeData?.width || 8;
-
         const displayColor = isHovered ? "#ef4444" : color;
-
         const isVisible =
           status === "completed" || status === "idle" || isHovered;
-
         useEffect(() => {
           if (strokeRef.current)
             setStrokeLength(strokeRef.current.getTotalLength());
@@ -241,7 +242,6 @@
                   strokeLinejoin: "round",
                   fill: "none",
                   strokeDasharray: strokeLength,
-
                   strokeDashoffset: isVisible ? 0 : strokeLength,
                   style: {
                     animation:
@@ -261,7 +261,6 @@
               onMouseLeave: onLeave,
               style: {
                 cursor: "pointer",
-
                 opacity: status === "waiting" && !isHovered ? 0 : 1,
                 transition: "fill 0.2s, opacity 0.3s",
               },
@@ -327,10 +326,8 @@
         const [splittingId, setSplittingId] = useState(null);
         const [splitDraft, setSplitDraft] = useState([]);
         const [selectedSplitIds, setSelectedSplitIds] = useState([]);
-
         const fileInputRef = useRef(null);
         const svgRef = useRef(null);
-
         const DURATION_PER_PATH = 1000;
         const DELAY_BETWEEN = 200;
 
@@ -463,15 +460,12 @@
           setRecordingId(id);
           setIsDrawing(false);
           setDraggingInfo(null);
-
           const targetPath = paths.find((p) => p.id === id);
           let computedBox = null;
-
           if (targetPath) {
             computedBox = calculateFocusViewBox(targetPath.d, svgInfo.viewBox);
             setRecordingViewBox(computedBox);
           }
-
           const prev = recordedStrokes[id];
           if (prev) {
             if (prev.width) setBrushSize(prev.width);
@@ -507,11 +501,9 @@
         const undoLastStroke = () =>
           setDraftStrokes((prev) => prev.slice(0, -1));
         const clearRecording = () => setDraftStrokes([]);
-
         const saveRecording = () => {
           const fullPath = draftStrokes.map((s) => s.d).join(" ");
           if (!fullPath.trim()) return;
-
           setRecordedStrokes((prev) => ({
             ...prev,
             [recordingId]: {
@@ -571,12 +563,22 @@
               const newPoints = [...stroke.points];
               newPoints[draggingInfo.pointIndex] = pt;
               stroke.points = newPoints;
-              stroke.d = getSmoothPath(newPoints);
+              stroke.d = getSvgPathFromStroke(newPoints);
               newStrokes[draggingInfo.strokeIndex] = stroke;
               return newStrokes;
             });
           } else if (isDrawing) {
-            setActiveStrokePoints((prev) => [...prev, pt]);
+            setActiveStrokePoints((prev) => {
+              if (prev.length > 0) {
+                const lastPt = prev[prev.length - 1];
+                const dist = Math.sqrt(
+                  Math.pow(pt[0] - lastPt[0], 2) +
+                    Math.pow(pt[1] - lastPt[1], 2)
+                );
+                if (dist < 2) return prev;
+              }
+              return [...prev, pt];
+            });
           }
         };
 
@@ -588,8 +590,8 @@
           } else if (isDrawing) {
             setIsDrawing(false);
             if (activeStrokePoints.length > 1) {
-              const simplePoints = ramerDouglasPeucker(activeStrokePoints, 2.0);
-              const smoothD = getSmoothPath(simplePoints);
+              const simplePoints = ramerDouglasPeucker(activeStrokePoints, 1.5);
+              const smoothD = getSvgPathFromStroke(simplePoints);
               setDraftStrokes((prev) => [
                 ...prev,
                 { points: simplePoints, d: smoothD },
@@ -610,7 +612,7 @@
               (_, idx) => idx !== pointIndex
             );
             stroke.points = newPoints;
-            stroke.d = getSmoothPath(newPoints);
+            stroke.d = getSvgPathFromStroke(newPoints);
             newStrokes[strokeIndex] = stroke;
             return newStrokes;
           });
@@ -638,7 +640,7 @@
               const newPoints = [...points];
               newPoints.splice(minInfo.index, 0, pt);
               stroke.points = newPoints;
-              stroke.d = getSmoothPath(newPoints);
+              stroke.d = getSvgPathFromStroke(newPoints);
               newStrokes[strokeIndex] = stroke;
               return newStrokes;
             }
@@ -653,7 +655,6 @@
           if (!path) return;
           const subPathStrings = splitCompoundPath(path.d);
           if (subPathStrings.length <= 1) return;
-
           const distinctColors = generateDistinctColors(subPathStrings.length);
           const initialSplitDraft = subPathStrings.map((dStr, idx) => ({
             id: `${pathId}_split_${Date.now()}_${idx}`,
@@ -674,7 +675,6 @@
 
         const mergeSelectedSplits = () => {
           if (selectedSplitIds.length < 2) return;
-
           const indices = splitDraft
             .map((item, index) =>
               selectedSplitIds.includes(item.id) ? index : -1
@@ -683,25 +683,19 @@
             .sort((a, b) => a - b);
 
           if (indices.length === 0) return;
-
           const selectedItems = indices.map((i) => splitDraft[i]);
           const combinedD = selectedItems.map((item) => item.d).join(" ");
           const firstIndex = indices[0];
-
           const newItem = {
             id: `${splittingId}_merged_${Date.now()}`,
             d: combinedD,
             splitColor: selectedItems[0].splitColor,
           };
-
           const newDraft = [...splitDraft];
-
           for (let i = indices.length - 1; i >= 0; i--) {
             newDraft.splice(indices[i], 1);
           }
-
           newDraft.splice(firstIndex, 0, newItem);
-
           setSplitDraft(newDraft);
           setSelectedSplitIds([]);
         };
@@ -726,26 +720,21 @@
           const originalIndex = paths.findIndex((p) => p.id === splittingId);
           if (originalIndex === -1) return;
           const originalPath = paths[originalIndex];
-
           const newPaths = splitDraft.map((item, idx) => ({
             id: `${originalPath.id}_part_${idx + 1}`,
             name: `${originalPath.name}.${idx + 1}`,
             color: originalPath.color,
             d: item.d,
           }));
-
           const updatedPaths = [...paths];
           updatedPaths.splice(originalIndex, 1, ...newPaths);
-
           const updatedRecordings = { ...recordedStrokes };
           delete updatedRecordings[splittingId];
-
           setPaths(updatedPaths);
           setRecordedStrokes(updatedRecordings);
           setSplittingId(null);
           setSplitDraft([]);
           setSelectedSplitIds([]);
-
           setCurrentStep(-1);
           setIsPlaying(false);
         };
@@ -773,7 +762,6 @@
         const controlPointSize = recordingViewBox
           ? parseFloat(recordingViewBox.split(" ")[2]) / 120
           : 1;
-
         return h(
           "div",
           {
@@ -909,7 +897,6 @@
                         h(
                           "div",
                           { className: "flex items-center gap-3" },
-
                           h("input", {
                             type: "checkbox",
                             checked: selectedSplitIds.includes(item.id),
@@ -959,7 +946,6 @@
                       )
                     )
                   ),
-
                   h(
                     "div",
                     {
@@ -1022,7 +1008,6 @@
                       : "p-6 rounded-2xl shadow-2xl max-w-lg w-full"
                   }`,
                 },
-
                 h(
                   "div",
                   {
@@ -1093,7 +1078,6 @@
                     )
                   )
                 ),
-
                 h(
                   "div",
                   {
@@ -1152,7 +1136,6 @@
                     )
                   )
                 ),
-
                 h(
                   "div",
                   {
@@ -1545,7 +1528,6 @@
                     },
                     h(RotateCcw, { size: 20 })
                   ),
-
                   h(
                     "div",
                     { className: "flex items-center gap-2" },
@@ -1581,7 +1563,6 @@
                             className: "ml-1",
                           })
                     ),
-
                     h(
                       "button",
                       {
@@ -1594,7 +1575,6 @@
                       h(SkipForward, { size: 24 })
                     )
                   ),
-
                   h(
                     "div",
                     {
@@ -1663,7 +1643,6 @@
                         null,
                         paths.map((path, index) => {
                           let status = "waiting";
-
                           if (currentStep === -1) {
                             status = "idle";
                           } else {
