@@ -4,9 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>真迹还原系统</title>
-
     <script src="https://cdn.tailwindcss.com"></script>
-
     <script type="importmap">
       {
         "imports": {
@@ -17,42 +15,244 @@
       }
     </script>
   </head>
-
   <body>
     <div id="root"></div>
 
     <script type="module">
-      import React, { useState, useEffect, useRef } from "react";
+      import React, { useState, useEffect, useRef, useMemo } from "react";
       import { createRoot } from "react-dom/client";
       import {
-        Play,
-        Pause,
-        SkipBack,
-        SkipForward,
-        RotateCcw,
-        ArrowUp,
-        ArrowDown,
-        Feather,
-        PenTool,
-        Sliders,
-        Undo,
-        Trash2,
-        ZoomIn,
-        Upload,
-        FileText,
-        X,
-        Download,
-        MousePointer2,
-        Maximize2,
-        Minimize2,
-        Edit3,
-        Scissors,
-        Check,
-        GripVertical,
-        Merge,
+        Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
+        Feather, PenTool, Sliders, Undo, Trash2, ZoomIn, Upload, FileText,
+        X, Download, MousePointer2, Maximize2, Minimize2, Edit3, Scissors,
+        Check, GripVertical, Merge, Magnet, Cpu, Zap
       } from "lucide-react";
 
+      // --- 核心算法 (细化与骨架提取) ---
+
+      function zhangSuenThinning(grid, w, h) {
+        let tempGrid = new Uint8Array(grid);
+        let markers = [];
+        let changed = true;
+        const p = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : tempGrid[y * w + x]);
+
+        while (changed) {
+          changed = false;
+          // 迭代 1
+          markers = [];
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              if (tempGrid[y * w + x] === 0) continue;
+              const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
+              const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
+              const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
+              const A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + (p4 == 0 && p5 == 1) +
+                        (p5 == 0 && p6 == 1) + (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
+                        (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
+              const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+              const m1 = p2 * p4 * p6;
+              const m2 = p4 * p6 * p8;
+              if (A === 1 && B >= 2 && B <= 6 && m1 === 0 && m2 === 0) markers.push(y * w + x);
+            }
+          }
+          if (markers.length > 0) {
+            for (let i of markers) tempGrid[i] = 0;
+            changed = true;
+          }
+          // 迭代 2
+          markers = [];
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              if (tempGrid[y * w + x] === 0) continue;
+              const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
+              const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
+              const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
+              const A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + (p4 == 0 && p5 == 1) +
+                        (p5 == 0 && p6 == 1) + (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
+                        (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
+              const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+              const m1 = p2 * p4 * p8;
+              const m2 = p2 * p6 * p8;
+              if (A === 1 && B >= 2 && B <= 6 && m1 === 0 && m2 === 0) markers.push(y * w + x);
+            }
+          }
+          if (markers.length > 0) {
+            for (let i of markers) tempGrid[i] = 0;
+            changed = true;
+          }
+        }
+        return tempGrid;
+      }
+
+      function guoHallThinning(grid, w, h) {
+        let tempGrid = new Uint8Array(grid);
+        let markers = [];
+        let changed = true;
+        let iter = 0;
+        const p = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : tempGrid[y * w + x]);
+
+        while (changed) {
+          changed = false;
+          markers = [];
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              if (tempGrid[y * w + x] === 0) continue;
+              const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
+              const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
+              const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
+              const C = (!p2 & (p3 | p4)) + (!p4 & (p5 | p6)) + (!p6 & (p7 | p8)) + (!p8 & (p9 | p2));
+              const N1 = (p9 | p2) + (p3 | p4) + (p5 | p6) + (p7 | p8);
+              const N2 = (p2 | p3) + (p4 | p5) + (p6 | p7) + (p8 | p9);
+              const N = Math.min(N1, N2);
+              let m = 0;
+              if (iter % 2 === 0) m = (p6 | p7 | !p9) & p8;
+              else m = (p2 | p3 | !p5) & p4;
+              if (C === 1 && N >= 2 && N <= 3 && m === 0) markers.push(y * w + x);
+            }
+          }
+          if (markers.length > 0) {
+            for (let i of markers) tempGrid[i] = 0;
+            changed = true;
+          }
+          iter++;
+        }
+        return tempGrid;
+      }
+
+      function optimizeIntersections(skeletonData, originalBinaryData, w, h) {
+        let pixels = new Int8Array(skeletonData);
+        let junctions = [];
+        const getSkel = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? pixels[y * w + x] : 0);
+        const getOrig = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? originalBinaryData[y * w + x] : 0);
+
+        // 识别特征点并计算内切圆
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            if (getSkel(x, y) === 1) {
+              let nSum = 0;
+              for (let dy = -1; dy <= 1; dy++)
+                for (let dx = -1; dx <= 1; dx++)
+                  if ((dx !== 0 || dy !== 0) && getSkel(x + dx, y + dy) === 1) nSum++;
+              if (nSum >= 3) {
+                let r = 1;
+                let safe = true;
+                while (safe && r < 50) {
+                  for (let ky = -r; ky <= r; ky++) {
+                    for (let kx = -r; kx <= r; kx++) {
+                      if (kx * kx + ky * ky <= r * r) {
+                        if (getOrig(x + kx, y + ky) === 0) {
+                          safe = false;
+                          break;
+                        }
+                      }
+                    }
+                    if (!safe) break;
+                  }
+                  if (safe) r++;
+                }
+                junctions.push({ x, y, r: r - 1 });
+              }
+            }
+          }
+        }
+
+        // 简单去毛刺
+        const pruneLimit = 3;
+        for (let k = 0; k < pruneLimit; k++) {
+          let toPrune = [];
+          for (let y = 1; y < h - 1; y++) {
+            for (let x = 1; x < w - 1; x++) {
+              if (pixels[y * w + x] === 1) {
+                let nSum = 0;
+                for (let dy = -1; dy <= 1; dy++)
+                  for (let dx = -1; dx <= 1; dx++)
+                    if ((dx !== 0 || dy !== 0) && pixels[(y + dy) * w + (x + dx)] === 1) nSum++;
+                if (nSum <= 1) toPrune.push(y * w + x);
+              }
+            }
+          }
+          if (toPrune.length === 0) break;
+          for (let idx of toPrune) pixels[idx] = 0;
+        }
+        return pixels;
+      }
+
       // --- 辅助函数 ---
+
+      const generateSkeleton = (svgPathD, width, height, viewBoxStr, algorithm) => {
+        if (!svgPathD || !viewBoxStr) return { points: [], dataUrl: null };
+
+        const vbParts = viewBoxStr.split(" ").map(Number);
+        const [vbX, vbY, vbW, vbH] = vbParts;
+
+        // 网格精度设定
+        const GRID_SIZE = 400;
+        const scale = Math.min(GRID_SIZE / vbW, GRID_SIZE / vbH);
+        const canvasW = Math.ceil(vbW * scale);
+        const canvasH = Math.ceil(vbH * scale);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+        const ctx = canvas.getContext("2d");
+
+        // 1. 绘制二值化图像
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvasW, canvasH);
+        ctx.translate(-vbX * scale, -vbY * scale);
+        ctx.scale(scale, scale);
+        const p = new Path2D(svgPathD);
+        ctx.fillStyle = "black";
+        ctx.fill(p);
+
+        const imgData = ctx.getImageData(0, 0, canvasW, canvasH);
+        const data = imgData.data;
+        const binData = new Uint8Array(canvasW * canvasH);
+
+        for (let i = 0; i < data.length; i += 4) {
+          binData[i / 4] = data[i] < 128 ? 1 : 0;
+        }
+
+        let thinnedData;
+        if (algorithm === "guo-hall") {
+          thinnedData = guoHallThinning(binData, canvasW, canvasH);
+        } else if (algorithm === "optimized") {
+          const zs = zhangSuenThinning(binData, canvasW, canvasH);
+          thinnedData = optimizeIntersections(zs, binData, canvasW, canvasH);
+        } else {
+          thinnedData = zhangSuenThinning(binData, canvasW, canvasH);
+        }
+
+        // 2. 收集坐标并生成可视化
+        const points = [];
+        const vizImgData = ctx.createImageData(canvasW, canvasH);
+        const vData = vizImgData.data;
+
+        for (let y = 0; y < canvasH; y++) {
+          for (let x = 0; x < canvasW; x++) {
+            const idx = y * canvasW + x;
+            if (thinnedData[idx] === 1) {
+              const svgX = x / scale + vbX;
+              const svgY = y / scale + vbY;
+              points.push([svgX, svgY]);
+
+              // 绘制青色骨架
+              const pIdx = idx * 4;
+              vData[pIdx] = 6;
+              vData[pIdx + 1] = 182;
+              vData[pIdx + 2] = 212;
+              vData[pIdx + 3] = 255;
+            }
+          }
+        }
+
+        // 3. 导出 Base64
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        ctx.putImageData(vizImgData, 0, 0);
+
+        return { points, dataUrl: canvas.toDataURL() };
+      };
 
       const getDistance = (p1, p2) =>
         Math.sqrt(Math.pow(p1[0] - p2[0], 2) + Math.pow(p1[1] - p2[1], 2));
@@ -62,9 +262,7 @@
         let dy = lineEnd[1] - lineStart[1];
         if (dx === 0 && dy === 0) return getDistance(point, lineStart);
         const mag = dx * dx + dy * dy;
-        let u =
-          ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) /
-          mag;
+        let u = ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / mag;
         if (u > 1) u = 1;
         else if (u < 0) u = 0;
         const x = lineStart[0] + u * dx;
@@ -86,10 +284,7 @@
         }
         if (dmax > epsilon) {
           const res1 = ramerDouglasPeucker(points.slice(0, index + 1), epsilon);
-          const res2 = ramerDouglasPeucker(
-            points.slice(index, end + 1),
-            epsilon
-          );
+          const res2 = ramerDouglasPeucker(points.slice(index, end + 1), epsilon);
           return [...res1.slice(0, -1), ...res2];
         } else {
           return [points[0], points[end]];
@@ -112,10 +307,7 @@
           const p3 = i < len - 2 ? points[i + 2] : p2;
           const cp1 = add(p1, mul(sub(p2, p0), k / 6));
           const cp2 = sub(p2, mul(sub(p3, p1), k / 6));
-
-          d += ` C ${cp1[0].toFixed(2)} ${cp1[1].toFixed(2)}, ${cp2[0].toFixed(
-            2
-          )} ${cp2[1].toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+          d += ` C ${cp1[0].toFixed(2)} ${cp1[1].toFixed(2)}, ${cp2[0].toFixed(2)} ${cp2[1].toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
         }
         if (close) d += " Z";
         return d;
@@ -131,9 +323,7 @@
         if (!viewBox && width && height) {
           const w = parseFloat(width);
           const h = parseFloat(height);
-          if (!isNaN(w) && !isNaN(h)) {
-            viewBox = `0 0 ${w} ${h}`;
-          }
+          if (!isNaN(w) && !isNaN(h)) viewBox = `0 0 ${w} ${h}`;
         }
         const pathElements = doc.querySelectorAll("path");
         const paths = [];
@@ -152,36 +342,21 @@
       };
 
       const splitCompoundPath = (d) => {
-        const commands = d.split(/(?=[Mm])/).filter((p) => p.trim().length > 0);
-        return commands;
+        return d.split(/(?=[Mm])/).filter((p) => p.trim().length > 0);
       };
 
       const generateDistinctColors = (count) => {
-        const colors = [
-          "#ef4444",
-          "#3b82f6",
-          "#10b981",
-          "#f59e0b",
-          "#8b5cf6",
-          "#ec4899",
-        ];
-        return Array.from(
-          { length: count },
-          (_, i) => colors[i % colors.length]
-        );
+        const colors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"];
+        return Array.from({ length: count }, (_, i) => colors[i % colors.length]);
       };
 
       const calculateFocusViewBox = (d, fallbackViewBox) => {
         const numbers = d.match(/[-+]?[0-9]*\.?[0-9]+/g)?.map(Number);
         if (!numbers || numbers.length === 0) return fallbackViewBox || "";
-        let minX = Infinity,
-          minY = Infinity,
-          maxX = -Infinity,
-          maxY = -Infinity;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (let i = 0; i < numbers.length; i += 2) {
           if (i + 1 >= numbers.length) break;
-          const x = numbers[i];
-          const y = numbers[i + 1];
+          const x = numbers[i], y = numbers[i + 1];
           if (x < minX) minX = x;
           if (x > maxX) maxX = x;
           if (y < minY) minY = y;
@@ -190,36 +365,23 @@
         const width = maxX - minX;
         const height = maxY - minY;
         const padding = Math.max(width, height) * 0.2;
-        return `${minX - padding} ${minY - padding} ${width + padding * 2} ${
-          height + padding * 2
-        }`;
+        return `${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`;
       };
 
       // --- 组件 ---
 
-      const AnimatedPath = ({
-        d,
-        color,
-        status,
-        isPaused,
-        totalDurationPerPath,
-        id,
-        isHovered,
-        onHover,
-        onLeave,
-        recordedStrokeData,
-      }) => {
+      const AnimatedPath = ({ d, color, status, isPaused, totalDurationPerPath, id, isHovered, onHover, onLeave, recordedStrokeData }) => {
         const strokeRef = useRef(null);
         const [strokeLength, setStrokeLength] = useState(0);
         const strokePath = recordedStrokeData?.d;
         const strokeWidth = recordedStrokeData?.width || 8;
         const displayColor = isHovered ? "#ef4444" : color;
-        const isVisible =
-          status === "completed" || status === "idle" || isHovered;
+        const isVisible = status === "completed" || status === "idle" || isHovered;
+
         useEffect(() => {
-          if (strokeRef.current)
-            setStrokeLength(strokeRef.current.getTotalLength());
+          if (strokeRef.current) setStrokeLength(strokeRef.current.getTotalLength());
         }, [strokePath]);
+
         const maskId = `mask-${id}`;
         if (strokePath) {
           return React.createElement(
@@ -242,10 +404,7 @@
                   strokeDasharray: strokeLength,
                   strokeDashoffset: isVisible ? 0 : strokeLength,
                   style: {
-                    animation:
-                      status === "animating"
-                        ? `dash ${totalDurationPerPath}ms ease-out forwards`
-                        : "none",
+                    animation: status === "animating" ? `dash ${totalDurationPerPath}ms ease-out forwards` : "none",
                     animationPlayState: isPaused ? "paused" : "running",
                   },
                 })
@@ -282,10 +441,7 @@
           onMouseLeave: onLeave,
           style: {
             opacity: isVisible ? 1 : 0,
-            animation:
-              status === "animating"
-                ? `fadeIn ${totalDurationPerPath}ms ease-out forwards`
-                : "none",
+            animation: status === "animating" ? `fadeIn ${totalDurationPerPath}ms ease-out forwards` : "none",
             animationPlayState: isPaused ? "paused" : "running",
             transition: "fill 0.2s, opacity 0.3s",
           },
@@ -293,24 +449,15 @@
       };
 
       function App() {
-        // --- 核心状态 ---
+        // --- 状态定义 ---
         const [paths, setPaths] = useState([]);
         const [recordedStrokes, setRecordedStrokes] = useState({});
-
-        // --- 播放状态 ---
         const [isPlaying, setIsPlaying] = useState(false);
         const [currentStep, setCurrentStep] = useState(-1);
-
-        // --- UI 状态 ---
         const [hoveredId, setHoveredId] = useState(null);
-        const [svgInfo, setSvgInfo] = useState({
-          viewBox: null,
-          width: null,
-          height: null,
-        });
+        const [svgInfo, setSvgInfo] = useState({ viewBox: null, width: null, height: null });
         const [uploadedFileName, setUploadedFileName] = useState("");
 
-        // --- 录制相关状态 ---
         const [recordingId, setRecordingId] = useState(null);
         const [recordingViewBox, setRecordingViewBox] = useState(null);
         const [brushSize, setBrushSize] = useState(8);
@@ -320,19 +467,27 @@
         const [draggingInfo, setDraggingInfo] = useState(null);
         const [isFullScreen, setIsFullScreen] = useState(false);
 
-        // --- 拆分相关状态 ---
+        const [selectedAlgorithm, setSelectedAlgorithm] = useState("zhang-suen");
+        const [skeletonPoints, setSkeletonPoints] = useState([]);
+        const [skeletonImg, setSkeletonImg] = useState(null);
+        const [useMagnet, setUseMagnet] = useState(true);
+        const [isProcessingSkeleton, setIsProcessingSkeleton] = useState(false);
+
         const [splittingId, setSplittingId] = useState(null);
         const [splitDraft, setSplitDraft] = useState([]);
         const [selectedSplitIds, setSelectedSplitIds] = useState([]);
+        const [speed, setSpeed] = useState(1.0);
+
         const fileInputRef = useRef(null);
         const svgRef = useRef(null);
-        const DURATION_PER_PATH = 1000;
+        const BASE_DURATION = 1000;
         const DELAY_BETWEEN = 200;
 
-        // --- 播放逻辑 ---
+        // --- 副作用 ---
         useEffect(() => {
           let timer;
           if (isPlaying && currentStep < paths.length) {
+            const dynamicDuration = BASE_DURATION / speed;
             if (currentStep === -1) {
               setCurrentStep(0);
             } else {
@@ -344,30 +499,42 @@
                   }
                   return prev + 1;
                 });
-              }, DURATION_PER_PATH + DELAY_BETWEEN);
+              }, dynamicDuration + DELAY_BETWEEN);
             }
           }
           return () => clearTimeout(timer);
-        }, [isPlaying, currentStep, paths.length]);
+        }, [isPlaying, currentStep, paths.length, speed]);
 
+        useEffect(() => {
+          if (recordingId) {
+            const targetPath = paths.find((p) => p.id === recordingId);
+            if (targetPath) {
+              setIsProcessingSkeleton(true);
+              setTimeout(() => {
+                const { points, dataUrl } = generateSkeleton(
+                  targetPath.d,
+                  svgInfo.width,
+                  svgInfo.height,
+                  recordingViewBox || svgInfo.viewBox,
+                  selectedAlgorithm
+                );
+                setSkeletonPoints(points);
+                setSkeletonImg(dataUrl);
+                setIsProcessingSkeleton(false);
+              }, 50);
+            }
+          } else {
+            setSkeletonPoints([]);
+            setSkeletonImg(null);
+          }
+        }, [recordingId, selectedAlgorithm, paths, svgInfo]);
+
+        // --- 交互处理 ---
         const handlePlayPause = () => {
           if (paths.length === 0) return;
-          if (currentStep >= paths.length - 1 && !isPlaying) {
-            setCurrentStep(0);
-          } else if (currentStep === -1) {
-            setCurrentStep(0);
-          }
+          if (currentStep >= paths.length - 1 && !isPlaying) setCurrentStep(0);
+          else if (currentStep === -1) setCurrentStep(0);
           setIsPlaying(!isPlaying);
-        };
-
-        const handlePrevStep = () => {
-          setIsPlaying(false);
-          setCurrentStep((prev) => Math.max(0, prev - 1));
-        };
-
-        const handleNextStep = () => {
-          setIsPlaying(false);
-          setCurrentStep((prev) => Math.min(paths.length - 1, prev + 1));
         };
 
         const handleReset = () => {
@@ -375,7 +542,6 @@
           setCurrentStep(-1);
         };
 
-        // --- 文件处理 ---
         const handleFileUpload = (event) => {
           const file = event.target.files?.[0];
           if (!file) return;
@@ -386,37 +552,23 @@
               if (file.name.endsWith(".json")) {
                 try {
                   const projectData = JSON.parse(content);
-                  if (
-                    projectData.type === "trace-restore-project" &&
-                    projectData.paths
-                  ) {
+                  if (projectData.type === "trace-restore-project" && projectData.paths) {
                     setPaths(projectData.paths);
                     setRecordedStrokes(projectData.recordedStrokes || {});
                     setSvgInfo(projectData.svgInfo);
                     setUploadedFileName(file.name.replace(".json", ""));
                     handleReset();
-                  } else {
-                    alert("无效的项目文件格式");
-                  }
-                } catch (err) {
-                  alert("JSON 文件解析失败");
-                }
+                  } else alert("无效的项目文件格式");
+                } catch (err) { alert("JSON 文件解析失败"); }
               } else {
-                const {
-                  paths: parsedPaths,
-                  viewBox,
-                  width,
-                  height,
-                } = parseSvgFile(content);
+                const { paths: parsedPaths, viewBox, width, height } = parseSvgFile(content);
                 if (parsedPaths.length > 0) {
                   setPaths(parsedPaths);
                   setSvgInfo({ viewBox, width, height });
                   setUploadedFileName(file.name);
                   setRecordedStrokes({});
                   handleReset();
-                } else {
-                  alert("未能解析 SVG");
-                }
+                } else alert("未能解析 SVG");
               }
             }
           };
@@ -432,9 +584,7 @@
             paths,
             recordedStrokes,
           };
-          const blob = new Blob([JSON.stringify(projectData, null, 2)], {
-            type: "application/json",
-          });
+          const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: "application/json" });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
@@ -445,15 +595,6 @@
           URL.revokeObjectURL(url);
         };
 
-        const clearUploadedFile = () => {
-          setPaths([]);
-          setSvgInfo({ viewBox: null, width: null, height: null });
-          setUploadedFileName("");
-          setRecordedStrokes({});
-          handleReset();
-        };
-
-        // --- 录制逻辑 ---
         const startRecording = (id) => {
           setRecordingId(id);
           setIsDrawing(false);
@@ -467,19 +608,12 @@
           const prev = recordedStrokes[id];
           if (prev) {
             if (prev.width) setBrushSize(prev.width);
-            if (prev.rawStrokes && prev.rawStrokes.length > 0) {
-              setDraftStrokes(prev.rawStrokes);
-            } else {
-              setDraftStrokes([]);
-            }
+            setDraftStrokes(prev.rawStrokes || []);
           } else {
             let autoSize = 8;
             if (computedBox) {
               const parts = computedBox.split(" ");
-              if (parts.length === 4) {
-                const w = parseFloat(parts[2]);
-                autoSize = Math.max(2, Math.round(w / 30));
-              }
+              if (parts.length === 4) autoSize = Math.max(2, Math.round(parseFloat(parts[2]) / 30));
             }
             setBrushSize(autoSize);
             setDraftStrokes([]);
@@ -494,26 +628,18 @@
           setIsDrawing(false);
           setDraggingInfo(null);
           setIsFullScreen(false);
+          setSkeletonPoints([]);
+          setSkeletonImg(null);
         };
 
-        const undoLastStroke = () =>
-          setDraftStrokes((prev) => prev.slice(0, -1));
-        const clearRecording = () => setDraftStrokes([]);
         const saveRecording = () => {
           const fullPath = draftStrokes.map((s) => s.d).join(" ");
           if (!fullPath.trim()) return;
           setRecordedStrokes((prev) => ({
             ...prev,
-            [recordingId]: {
-              d: fullPath,
-              width: brushSize,
-              rawStrokes: draftStrokes,
-            },
+            [recordingId]: { d: fullPath, width: brushSize, rawStrokes: draftStrokes },
           }));
-          setRecordingId(null);
-          setDraftStrokes([]);
-          setActiveStrokePoints([]);
-          setIsFullScreen(false);
+          cancelRecording();
         };
 
         const getRelativeCoordinates = (e) => {
@@ -525,11 +651,26 @@
           return [Number(svgP.x.toFixed(2)), Number(svgP.y.toFixed(2))];
         };
 
+        const snapToSkeleton = (pt) => {
+          if (!useMagnet || skeletonPoints.length === 0) return pt;
+          const viewBoxWidth = parseFloat(recordingViewBox.split(" ")[2]);
+          const threshold = viewBoxWidth * 0.05;
+          let minDist = Infinity;
+          let nearestPt = null;
+          for (let sp of skeletonPoints) {
+            const d = getDistance(pt, sp);
+            if (d < minDist) {
+              minDist = d;
+              nearestPt = sp;
+            }
+          }
+          return nearestPt && minDist < threshold ? nearestPt : pt;
+        };
+
         const handlePointerDown = (e) => {
           if (!recordingId || !svgRef.current) return;
-          const pt = getRelativeCoordinates(e);
-          const hitRadius =
-            parseFloat(recordingViewBox.split(" ")[2]) / 40 || 5;
+          let pt = getRelativeCoordinates(e);
+          const hitRadius = parseFloat(recordingViewBox.split(" ")[2]) / 40 || 5;
           let foundHit = null;
           for (let i = draftStrokes.length - 1; i >= 0; i--) {
             const points = draftStrokes[i].points;
@@ -546,6 +687,7 @@
             e.target.setPointerCapture(e.pointerId);
           } else {
             setIsDrawing(true);
+            pt = snapToSkeleton(pt);
             setActiveStrokePoints([pt]);
             e.target.setPointerCapture(e.pointerId);
           }
@@ -553,7 +695,7 @@
 
         const handlePointerMove = (e) => {
           if (!recordingId || !svgRef.current) return;
-          const pt = getRelativeCoordinates(e);
+          let pt = getRelativeCoordinates(e);
           if (draggingInfo) {
             setDraftStrokes((prev) => {
               const newStrokes = [...prev];
@@ -566,14 +708,11 @@
               return newStrokes;
             });
           } else if (isDrawing) {
+            pt = snapToSkeleton(pt);
             setActiveStrokePoints((prev) => {
               if (prev.length > 0) {
                 const lastPt = prev[prev.length - 1];
-                const dist = Math.sqrt(
-                  Math.pow(pt[0] - lastPt[0], 2) +
-                    Math.pow(pt[1] - lastPt[1], 2)
-                );
-                if (dist < 2) return prev;
+                if (Math.sqrt(Math.pow(pt[0] - lastPt[0], 2) + Math.pow(pt[1] - lastPt[1], 2)) < 2) return prev;
               }
               return [...prev, pt];
             });
@@ -589,31 +728,10 @@
             setIsDrawing(false);
             if (activeStrokePoints.length > 1) {
               const simplePoints = ramerDouglasPeucker(activeStrokePoints, 1.5);
-              const smoothD = getSvgPathFromStroke(simplePoints);
-              setDraftStrokes((prev) => [
-                ...prev,
-                { points: simplePoints, d: smoothD },
-              ]);
+              setDraftStrokes((prev) => [...prev, { points: simplePoints, d: getSvgPathFromStroke(simplePoints) }]);
             }
             setActiveStrokePoints([]);
           }
-        };
-
-        const handlePointDoubleClick = (strokeIndex, pointIndex, e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          setDraftStrokes((prev) => {
-            const newStrokes = [...prev];
-            const stroke = { ...newStrokes[strokeIndex] };
-            if (stroke.points.length <= 2) return prev;
-            const newPoints = stroke.points.filter(
-              (_, idx) => idx !== pointIndex
-            );
-            stroke.points = newPoints;
-            stroke.d = getSvgPathFromStroke(newPoints);
-            newStrokes[strokeIndex] = stroke;
-            return newStrokes;
-          });
         };
 
         const handleStrokeDoubleClick = (strokeIndex, e) => {
@@ -628,9 +746,7 @@
             for (let i = 0; i < points.length - 1; i++) {
               const d = perpendicularDistance(pt, points[i], points[i + 1]);
               const len = getDistance(points[i], points[i + 1]);
-              const d1 = getDistance(pt, points[i]);
-              const d2 = getDistance(pt, points[i + 1]);
-              if (d < minInfo.dist && d1 + d2 < len * 1.5) {
+              if (d < minInfo.dist && getDistance(pt, points[i]) + getDistance(pt, points[i + 1]) < len * 1.5) {
                 minInfo = { dist: d, index: i + 1 };
               }
             }
@@ -646,71 +762,36 @@
           });
         };
 
-        // --- 拆分与合并逻辑 ---
-
+        // --- 拆分与合并 ---
         const startSplitting = (pathId) => {
           const path = paths.find((p) => p.id === pathId);
           if (!path) return;
           const subPathStrings = splitCompoundPath(path.d);
           if (subPathStrings.length <= 1) return;
           const distinctColors = generateDistinctColors(subPathStrings.length);
-          const initialSplitDraft = subPathStrings.map((dStr, idx) => ({
+          setSplittingId(pathId);
+          setSplitDraft(subPathStrings.map((dStr, idx) => ({
             id: `${pathId}_split_${Date.now()}_${idx}`,
             d: dStr,
             splitColor: distinctColors[idx],
-          }));
-          setSplittingId(pathId);
-          setSplitDraft(initialSplitDraft);
+          })));
           setSelectedSplitIds([]);
-        };
-
-        const toggleSplitSelection = (id) => {
-          setSelectedSplitIds((prev) =>
-            prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
-          );
         };
 
         const mergeSelectedSplits = () => {
           if (selectedSplitIds.length < 2) return;
           const indices = splitDraft
-            .map((item, index) =>
-              selectedSplitIds.includes(item.id) ? index : -1
-            )
-            .filter((i) => i !== -1)
-            .sort((a, b) => a - b);
-
+            .map((item, index) => (selectedSplitIds.includes(item.id) ? index : -1))
+            .filter((i) => i !== -1).sort((a, b) => a - b);
           if (indices.length === 0) return;
           const selectedItems = indices.map((i) => splitDraft[i]);
           const combinedD = selectedItems.map((item) => item.d).join(" ");
-          const firstIndex = indices[0];
-          const newItem = {
-            id: `${splittingId}_merged_${Date.now()}`,
-            d: combinedD,
-            splitColor: selectedItems[0].splitColor,
-          };
+          const newItem = { id: `${splittingId}_merged_${Date.now()}`, d: combinedD, splitColor: selectedItems[0].splitColor };
           const newDraft = [...splitDraft];
-          for (let i = indices.length - 1; i >= 0; i--) {
-            newDraft.splice(indices[i], 1);
-          }
-          newDraft.splice(firstIndex, 0, newItem);
+          for (let i = indices.length - 1; i >= 0; i--) newDraft.splice(indices[i], 1);
+          newDraft.splice(indices[0], 0, newItem);
           setSplitDraft(newDraft);
           setSelectedSplitIds([]);
-        };
-
-        const handleSplitReorder = (index, direction) => {
-          const newDraft = [...splitDraft];
-          if (direction === "up" && index > 0) {
-            [newDraft[index], newDraft[index - 1]] = [
-              newDraft[index - 1],
-              newDraft[index],
-            ];
-          } else if (direction === "down" && index < newDraft.length - 1) {
-            [newDraft[index], newDraft[index + 1]] = [
-              newDraft[index + 1],
-              newDraft[index],
-            ];
-          }
-          setSplitDraft(newDraft);
         };
 
         const confirmSplit = () => {
@@ -732,933 +813,213 @@
           setSplittingId(null);
           setSplitDraft([]);
           setSelectedSplitIds([]);
-          setCurrentStep(-1);
-          setIsPlaying(false);
         };
 
-        const handleReorder = (index, direction) => {
-          if (isPlaying) return;
-          const newPaths = [...paths];
-          if (direction === "up" && index > 0) {
-            [newPaths[index], newPaths[index - 1]] = [
-              newPaths[index - 1],
-              newPaths[index],
-            ];
-          } else if (direction === "down" && index < newPaths.length - 1) {
-            [newPaths[index], newPaths[index + 1]] = [
-              newPaths[index + 1],
-              newPaths[index],
-            ];
-          }
-          setPaths(newPaths);
-        };
-
-        // --- 渲染 ---
-
+        // --- 渲染 UI ---
         const h = React.createElement;
-        const controlPointSize = recordingViewBox
-          ? parseFloat(recordingViewBox.split(" ")[2]) / 120
-          : 1;
-        return h(
-          "div",
-          {
-            className:
-              "flex flex-col items-center justify-center h-screen bg-stone-100 p-4 font-sans text-stone-800 select-none overflow-hidden",
-          },
-          h(
-            "style",
-            null,
-            `
-                    @keyframes dash { to { stroke-dashoffset: 0; } }
-                    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                `
+        const controlPointSize = recordingViewBox ? parseFloat(recordingViewBox.split(" ")[2]) / 120 : 1;
+
+        return h("div", { className: "flex flex-col items-center justify-center h-screen bg-stone-100 p-4 font-sans text-stone-800 select-none overflow-hidden" },
+          h("style", null, `@keyframes dash { to { stroke-dashoffset: 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`),
+
+          // 拆分弹窗
+          splittingId && h("div", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm" },
+            h("div", { className: "bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden" },
+              h("div", { className: "p-4 border-b border-stone-200 flex justify-between items-center bg-stone-50" },
+                h("div", { className: "flex items-center gap-4" },
+                  h("h3", { className: "text-lg font-bold flex items-center gap-2 text-stone-700" }, h(Scissors, { size: 20 }), "拆分与排序"),
+                  h("button", {
+                    onClick: mergeSelectedSplits,
+                    disabled: selectedSplitIds.length < 2,
+                    className: `px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1 transition-all ${selectedSplitIds.length >= 2 ? "bg-amber-100 text-amber-700 hover:bg-amber-200" : "bg-stone-100 text-stone-300 cursor-not-allowed"}`,
+                  }, h(Merge, { size: 14 }), `合并选中 (${selectedSplitIds.length})`)
+                ),
+                h("div", { className: "flex gap-2" },
+                  h("button", { onClick: () => setSplittingId(null), className: "px-4 py-2 text-stone-500 hover:bg-stone-200 rounded-lg font-medium" }, "取消"),
+                  h("button", { onClick: confirmSplit, className: "px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-bold flex items-center gap-2" }, h(Check, { size: 18 }), "确认拆分")
+                )
+              ),
+              h("div", { className: "flex-1 flex overflow-hidden" },
+                h("div", { className: "w-1/3 border-r border-stone-200 bg-stone-50 overflow-y-auto p-4 flex flex-col gap-3" },
+                  splitDraft.map((item, idx) =>
+                    h("div", {
+                      key: item.id,
+                      className: `bg-white p-3 rounded-xl border-2 shadow-sm flex items-center justify-between transition-colors ${selectedSplitIds.includes(item.id) ? "bg-indigo-50 border-indigo-300" : ""}`,
+                      style: { borderColor: selectedSplitIds.includes(item.id) ? undefined : item.splitColor },
+                    },
+                    h("div", { className: "flex items-center gap-3" },
+                      h("input", { type: "checkbox", checked: selectedSplitIds.includes(item.id), onChange: () => setSelectedSplitIds(prev => prev.includes(item.id) ? prev.filter(pid => pid !== item.id) : [...prev, item.id]), className: "w-4 h-4 rounded border-stone-300 text-indigo-600 cursor-pointer" }),
+                      h("div", { className: "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white", style: { backgroundColor: item.splitColor } }, idx + 1),
+                      h("span", { className: "font-medium text-sm text-stone-700" }, `片段 ${idx + 1}`)
+                    ),
+                    h("div", { className: "flex flex-col gap-1" },
+                      h("button", { onClick: () => { const n = [...splitDraft]; [n[idx], n[idx-1]] = [n[idx-1], n[idx]]; setSplitDraft(n); }, disabled: idx === 0, className: "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20" }, h(ArrowUp, { size: 14 })),
+                      h("button", { onClick: () => { const n = [...splitDraft]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setSplitDraft(n); }, disabled: idx === splitDraft.length - 1, className: "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20" }, h(ArrowDown, { size: 14 }))
+                    )
+                  ))
+                ),
+                h("div", { className: "w-2/3 bg-stone-100 flex items-center justify-center p-8 relative" },
+                  h("svg", {
+                    viewBox: calculateFocusViewBox(splitDraft.map(s => s.d).join(" "), svgInfo.viewBox),
+                    className: "w-full h-full max-h-[500px] overflow-visible drop-shadow-xl"
+                  }, splitDraft.map(item => h("path", { key: item.id, d: item.d, fill: item.splitColor, stroke: "white", strokeWidth: 0.5, className: `transition-all duration-300 ${selectedSplitIds.includes(item.id) ? "opacity-100 stroke-indigo-500 stroke-2" : "opacity-90"}` })))
+                )
+              )
+            )
           ),
 
-          // --- 拆分弹窗 ---
-          splittingId &&
-            h(
-              "div",
-              {
-                className:
-                  "fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm",
-              },
-              h(
-                "div",
-                {
-                  className:
-                    "bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden",
-                },
-                h(
-                  "div",
-                  {
-                    className:
-                      "p-4 border-b border-stone-200 flex justify-between items-center bg-stone-50",
-                  },
-                  h(
-                    "div",
-                    { className: "flex items-center gap-4" },
-                    h(
-                      "h3",
-                      {
-                        className:
-                          "text-lg font-bold flex items-center gap-2 text-stone-700",
-                      },
-                      h(Scissors, { size: 20 }),
-                      "拆分与排序"
-                    ),
-                    h(
-                      "button",
-                      {
-                        onClick: mergeSelectedSplits,
-                        disabled: selectedSplitIds.length < 2,
-                        className: `px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1 transition-all ${
-                          selectedSplitIds.length >= 2
-                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                            : "bg-stone-100 text-stone-300 cursor-not-allowed"
-                        }`,
-                      },
-                      h(Merge, { size: 14 }),
-                      `合并选中 (${selectedSplitIds.length})`
-                    )
-                  ),
-                  h(
-                    "div",
-                    { className: "flex gap-2" },
-                    h(
-                      "button",
-                      {
-                        onClick: () => setSplittingId(null),
-                        className:
-                          "px-4 py-2 text-stone-500 hover:bg-stone-200 rounded-lg font-medium",
-                      },
-                      "取消"
-                    ),
-                    h(
-                      "button",
-                      {
-                        onClick: confirmSplit,
-                        className:
-                          "px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-bold flex items-center gap-2",
-                      },
-                      h(Check, { size: 18 }),
-                      "确认拆分"
-                    )
-                  )
-                ),
-                h(
-                  "div",
-                  { className: "flex-1 flex overflow-hidden" },
-                  h(
-                    "div",
-                    {
-                      className:
-                        "w-1/3 border-r border-stone-200 bg-stone-50 overflow-y-auto p-4 flex flex-col gap-3",
-                    },
-                    h(
-                      "div",
-                      {
-                        className:
-                          "text-sm text-stone-500 mb-2 flex justify-between items-center",
-                      },
-                      h("span", null, "勾选以合并，点击箭头以排序："),
-                      selectedSplitIds.length > 0 &&
-                        h(
-                          "button",
-                          {
-                            className:
-                              "text-xs text-indigo-500 hover:underline px-2",
-                            onClick: () => setSelectedSplitIds([]),
-                          },
-                          "取消选择"
-                        )
-                    ),
-                    splitDraft.map((item, idx) =>
-                      h(
-                        "div",
-                        {
-                          key: item.id,
-                          className: `bg-white p-3 rounded-xl border-2 shadow-sm flex items-center justify-between transition-colors ${
-                            selectedSplitIds.includes(item.id)
-                              ? "bg-indigo-50 border-indigo-300"
-                              : ""
-                          }`,
-                          style: {
-                            borderColor: selectedSplitIds.includes(item.id)
-                              ? undefined
-                              : item.splitColor,
-                          },
-                        },
-                        h(
-                          "div",
-                          { className: "flex items-center gap-3" },
-                          h("input", {
-                            type: "checkbox",
-                            checked: selectedSplitIds.includes(item.id),
-                            onChange: () => toggleSplitSelection(item.id),
-                            className:
-                              "w-4 h-4 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer",
-                          }),
-                          h(
-                            "div",
-                            {
-                              className:
-                                "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white",
-                              style: { backgroundColor: item.splitColor },
-                            },
-                            idx + 1
-                          ),
-                          h(
-                            "span",
-                            { className: "font-medium text-sm text-stone-700" },
-                            `片段 ${idx + 1}`
-                          )
-                        ),
-                        h(
-                          "div",
-                          { className: "flex flex-col gap-1" },
-                          h(
-                            "button",
-                            {
-                              onClick: () => handleSplitReorder(idx, "up"),
-                              disabled: idx === 0,
-                              className:
-                                "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20",
-                            },
-                            h(ArrowUp, { size: 14 })
-                          ),
-                          h(
-                            "button",
-                            {
-                              onClick: () => handleSplitReorder(idx, "down"),
-                              disabled: idx === splitDraft.length - 1,
-                              className:
-                                "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20",
-                            },
-                            h(ArrowDown, { size: 14 })
-                          )
-                        )
-                      )
-                    )
-                  ),
-                  h(
-                    "div",
-                    {
-                      className:
-                        "w-2/3 bg-stone-100 flex items-center justify-center p-8 relative",
-                    },
-                    h(
-                      "div",
-                      {
-                        className:
-                          "absolute top-4 left-4 bg-white/80 p-2 rounded text-xs text-stone-500",
-                      },
-                      "预览区：不同颜色代表拆分后的不同片段"
-                    ),
-                    h(
-                      "svg",
-                      {
-                        viewBox: calculateFocusViewBox(
-                          splitDraft.map((s) => s.d).join(" "),
-                          svgInfo.viewBox
-                        ),
-                        className:
-                          "w-full h-full max-h-[500px] overflow-visible drop-shadow-xl",
-                      },
-                      splitDraft.map((item, idx) =>
-                        h("path", {
-                          key: item.id,
-                          d: item.d,
-                          fill: item.splitColor,
-                          stroke: "white",
-                          strokeWidth: 0.5,
-                          className: `transition-all duration-300 ${
-                            selectedSplitIds.includes(item.id)
-                              ? "opacity-100 stroke-indigo-500 stroke-2"
-                              : "opacity-90"
-                          }`,
-                        })
-                      )
-                    )
-                  )
-                )
-              )
-            ),
-
-          // --- 录制弹窗 ---
-          recordingId &&
-            h(
-              "div",
-              {
-                className: `fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 ${
-                  isFullScreen ? "bg-white" : "bg-black/80"
-                }`,
-              },
-              h(
-                "div",
-                {
-                  className: `bg-white flex flex-col transition-all duration-300 ${
-                    isFullScreen
-                      ? "w-full h-full rounded-none p-4"
-                      : "p-6 rounded-2xl shadow-2xl max-w-lg w-full"
-                  }`,
-                },
-                h(
-                  "div",
-                  {
-                    className:
-                      "flex justify-between items-center mb-4 shrink-0",
-                  },
-                  h(
-                    "h3",
-                    { className: "text-xl font-bold flex items-center gap-2" },
-                    h(ZoomIn, { className: "text-indigo-500" }),
-                    `编辑: ${paths.find((p) => p.id === recordingId)?.name}`
-                  ),
-                  h(
-                    "div",
-                    { className: "space-x-2 flex items-center" },
-                    h(
-                      "button",
-                      {
-                        onClick: () => setIsFullScreen(!isFullScreen),
-                        className:
-                          "p-2 text-slate-500 hover:bg-slate-100 rounded",
-                        title: isFullScreen ? "退出全屏" : "全屏模式",
-                      },
-                      isFullScreen
-                        ? h(Minimize2, { size: 20 })
-                        : h(Maximize2, { size: 20 })
-                    ),
-                    h("div", { className: "w-px h-6 bg-slate-200 mx-1" }),
-                    h(
-                      "button",
-                      {
-                        onClick: undoLastStroke,
-                        disabled: draftStrokes.length === 0,
-                        className:
-                          "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30",
-                        title: "撤销",
-                      },
-                      h(Undo, { size: 18 })
-                    ),
-                    h(
-                      "button",
-                      {
-                        onClick: clearRecording,
-                        disabled: draftStrokes.length === 0,
-                        className:
-                          "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30",
-                        title: "清空",
-                      },
-                      h(Trash2, { size: 18 })
-                    ),
-                    h(
-                      "button",
-                      {
-                        onClick: cancelRecording,
-                        className:
-                          "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded",
-                      },
-                      "取消"
-                    ),
-                    h(
-                      "button",
-                      {
-                        onClick: saveRecording,
-                        className:
-                          "px-4 py-1 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold",
-                      },
-                      "保存"
-                    )
-                  )
-                ),
-                h(
-                  "div",
-                  {
-                    className:
-                      "mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex flex-wrap gap-4 shrink-0 text-xs items-center",
-                  },
-                  h(
-                    "div",
-                    { className: "flex items-center gap-2" },
-                    h(MousePointer2, {
-                      size: 14,
-                      className: "text-indigo-600",
-                    }),
-                    h(
-                      "span",
-                      { className: "text-indigo-800 font-medium" },
-                      "操作提示："
-                    ),
-                    h(
-                      "span",
-                      { className: "text-indigo-600" },
-                      "拖动微调 | 双击点=删除 | 双击线=加点"
-                    )
-                  ),
-                  h(
-                    "div",
-                    {
-                      className: "flex items-center gap-2 flex-1 min-w-[150px]",
-                    },
-                    h(
-                      "label",
-                      {
-                        className:
-                          "font-bold text-slate-500 uppercase flex items-center gap-1 shrink-0",
-                      },
-                      h(Sliders, { size: 12 }),
-                      " 笔刷"
-                    ),
-                    h("input", {
-                      type: "range",
-                      min: "1",
-                      max: "10",
-                      step: "0.5",
-                      value: brushSize,
-                      onChange: (e) => setBrushSize(parseFloat(e.target.value)),
-                      className:
-                        "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600",
-                    }),
-                    h(
-                      "span",
-                      {
-                        className:
-                          "font-mono bg-white px-2 rounded border w-8 text-center",
-                      },
-                      brushSize
-                    )
-                  )
-                ),
-                h(
-                  "div",
-                  {
-                    className: `border-2 border-dashed border-indigo-200 rounded-xl bg-white flex justify-center p-0 relative overflow-hidden cursor-crosshair flex-1 transition-all ${
-                      isFullScreen ? "h-full" : "h-[300px]"
-                    }`,
-                  },
-                  h(
-                    "svg",
-                    {
-                      ref: svgRef,
-                      viewBox: recordingViewBox,
-                      width: "100%",
-                      height: "100%",
-                      preserveAspectRatio: "xMidYMid meet",
-                      className: "overflow-visible touch-none",
-                      style: { background: "#f8fafc" },
-                      onPointerDown: handlePointerDown,
-                      onPointerMove: handlePointerMove,
-                      onPointerUp: handlePointerUp,
-                      onPointerLeave: handlePointerUp,
-                    },
-                    h("path", {
-                      d: paths.find((p) => p.id === recordingId)?.d,
-                      fill: "#e5e7eb",
-                    }),
-                    draftStrokes.map((strokeObj, i) =>
-                      h(
-                        "g",
-                        { key: i },
-                        h("path", {
-                          d: strokeObj.d,
-                          fill: "none",
-                          stroke: "transparent",
-                          strokeWidth: Math.max(brushSize * 2, 20),
-                          className: "cursor-copy",
-                          onDoubleClick: (e) => handleStrokeDoubleClick(i, e),
-                        }),
-                        h("path", {
-                          d: strokeObj.d,
-                          fill: "none",
-                          stroke: "rgba(79, 70, 229, 0.8)",
-                          strokeWidth: brushSize,
-                          strokeLinecap: "round",
-                          strokeLinejoin: "round",
-                          className: "pointer-events-none",
-                        }),
-                        !isDrawing &&
-                          strokeObj.points.map((pt, ptIdx) =>
-                            h("circle", {
-                              key: ptIdx,
-                              cx: pt[0],
-                              cy: pt[1],
-                              r: controlPointSize,
-                              fill: "#3b82f6",
-                              stroke: "white",
-                              strokeWidth: controlPointSize / 3,
-                              className:
-                                "hover:fill-red-500 cursor-move transition-colors",
-                              style: {
-                                filter:
-                                  "drop-shadow(0 1px 1px rgba(0,0,0,0.2))",
-                              },
-                              onDoubleClick: (e) =>
-                                handlePointDoubleClick(i, ptIdx, e),
-                            })
-                          )
-                      )
-                    ),
-                    isDrawing &&
-                      h("path", {
-                        d:
-                          activeStrokePoints.length > 0
-                            ? `M ${activeStrokePoints[0][0]} ${activeStrokePoints[0][1]}` +
-                              activeStrokePoints
-                                .slice(1)
-                                .map((p) => ` L ${p[0]} ${p[1]}`)
-                                .join("")
-                            : "",
-                        fill: "none",
-                        stroke: "rgba(239, 68, 68, 0.6)",
-                        strokeWidth: brushSize,
-                        strokeLinecap: "round",
-                        strokeLinejoin: "round",
-                      })
-                  )
-                )
-              )
-            ),
-
-          // --- 主界面 ---
-          h(
-            "div",
-            {
-              className:
-                "w-full max-w-[1600px] h-[75vh] grid grid-cols-1 lg:grid-cols-3 gap-6",
-            },
-            h(
-              "div",
-              {
-                className:
-                  "lg:col-span-1 bg-white rounded-2xl shadow-xl p-6 border border-stone-200 flex flex-col h-full overflow-hidden",
-              },
-              h(
-                "div",
-                {
-                  className: "flex items-center justify-between mb-6 shrink-0",
-                },
-                h(
-                  "h2",
-                  {
-                    className:
-                      "text-2xl font-serif font-bold text-stone-800 flex items-center gap-2",
-                  },
-                  h(Feather, { className: "w-6 h-6 text-stone-600" }),
-                  "真迹还原系统"
+          // 录制弹窗
+          recordingId && h("div", { className: `fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 ${isFullScreen ? "bg-white" : "bg-black/80"}` },
+            h("div", { className: `bg-white flex flex-col transition-all duration-300 ${isFullScreen ? "w-full h-full rounded-none p-4" : "p-6 rounded-2xl shadow-2xl max-w-lg w-full"}` },
+              h("div", { className: "flex justify-between items-center mb-4 shrink-0" },
+                h("h3", { className: "text-xl font-bold flex items-center gap-2" }, h(ZoomIn, { className: "text-indigo-500" }), `编辑: ${paths.find(p => p.id === recordingId)?.name}`),
+                h("div", { className: "space-x-2 flex items-center" },
+                  h("button", { onClick: () => setIsFullScreen(!isFullScreen), className: "p-2 text-slate-500 hover:bg-slate-100 rounded" }, isFullScreen ? h(Minimize2, { size: 20 }) : h(Maximize2, { size: 20 })),
+                  h("div", { className: "w-px h-6 bg-slate-200 mx-1" }),
+                  h("button", { onClick: () => setDraftStrokes(prev => prev.slice(0, -1)), disabled: draftStrokes.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30" }, h(Undo, { size: 18 })),
+                  h("button", { onClick: () => setDraftStrokes([]), disabled: draftStrokes.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30" }, h(Trash2, { size: 18 })),
+                  h("button", { onClick: cancelRecording, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded" }, "取消"),
+                  h("button", { onClick: saveRecording, className: "px-4 py-1 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold" }, "保存")
                 )
               ),
-              h(
-                "div",
-                { className: "mb-6 shrink-0" },
-                h("input", {
-                  ref: fileInputRef,
-                  type: "file",
-                  accept: ".svg,.txt,.json",
-                  onChange: handleFileUpload,
-                  className: "hidden",
-                }),
+              h("div", { className: "mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex flex-wrap gap-4 shrink-0 text-xs items-center" },
+                h("div", { className: "flex items-center gap-2 border-r border-indigo-200 pr-4" },
+                  h(Cpu, { size: 14, className: "text-indigo-600" }),
+                  h("select", { value: selectedAlgorithm, onChange: (e) => setSelectedAlgorithm(e.target.value), className: "bg-white border border-indigo-200 rounded px-1 py-0.5 text-xs text-indigo-800 focus:outline-none" },
+                    h("option", { value: "zhang-suen" }, "Zhang-Suen 细化"),
+                    h("option", { value: "guo-hall" }, "Guo-Hall 细化"),
+                    h("option", { value: "optimized" }, "内切圆优化 (去毛刺)")
+                  ),
+                  h("button", { onClick: () => setUseMagnet(!useMagnet), className: `flex items-center gap-1 px-2 py-0.5 rounded transition-colors border ${useMagnet ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-300"}` }, h(Magnet, { size: 12 }), useMagnet ? "吸附开" : "吸附关")
+                ),
+                h("div", { className: "flex items-center gap-2 flex-1 min-w-[150px]" },
+                  h("label", { className: "font-bold text-slate-500 uppercase flex items-center gap-1 shrink-0" }, h(Sliders, { size: 12 }), " 笔刷"),
+                  h("input", { type: "range", min: "1", max: "10", step: "0.1", value: brushSize, onChange: (e) => setBrushSize(parseFloat(e.target.value)), className: "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" }),
+                  h("span", { className: "font-mono bg-white px-2 rounded border w-8 text-center" }, brushSize)
+                )
+              ),
+              h("div", { className: `border-2 border-dashed border-indigo-200 rounded-xl bg-white flex justify-center p-0 relative overflow-hidden cursor-crosshair flex-1 transition-all ${isFullScreen ? "h-full" : "h-[300px]"}` },
+                isProcessingSkeleton && h("div", { className: "absolute inset-0 bg-white/50 z-20 flex items-center justify-center font-bold text-indigo-600" }, "正在计算骨架..."),
+                h("svg", {
+                    ref: svgRef,
+                    viewBox: recordingViewBox,
+                    width: "100%", height: "100%",
+                    preserveAspectRatio: "xMidYMid meet",
+                    className: "overflow-visible touch-none",
+                    style: { background: "#f8fafc" },
+                    onPointerDown: handlePointerDown, onPointerMove: handlePointerMove,
+                    onPointerUp: handlePointerUp, onPointerLeave: handlePointerUp,
+                  },
+                  h("path", { d: paths.find(p => p.id === recordingId)?.d, fill: "#e5e7eb" }),
+                  skeletonImg && h("image", { href: skeletonImg, x: (recordingViewBox || svgInfo.viewBox).split(" ")[0], y: (recordingViewBox || svgInfo.viewBox).split(" ")[1], width: (recordingViewBox || svgInfo.viewBox).split(" ")[2], height: (recordingViewBox || svgInfo.viewBox).split(" ")[3], style: { opacity: 0.8, pointerEvents: "none" }, preserveAspectRatio: "none" }),
+                  draftStrokes.map((strokeObj, i) =>
+                    h("g", { key: i },
+                      h("path", { d: strokeObj.d, fill: "none", stroke: "transparent", strokeWidth: Math.max(brushSize * 2, 20), className: "cursor-copy", onDoubleClick: (e) => handleStrokeDoubleClick(i, e) }),
+                      h("path", { d: strokeObj.d, fill: "none", stroke: "rgba(79, 70, 229, 0.8)", strokeWidth: brushSize, strokeLinecap: "round", strokeLinejoin: "round", className: "pointer-events-none" }),
+                      !isDrawing && strokeObj.points.map((pt, ptIdx) =>
+                        h("circle", { key: ptIdx, cx: pt[0], cy: pt[1], r: controlPointSize, fill: "#3b82f6", stroke: "white", strokeWidth: controlPointSize / 3, className: "hover:fill-red-500 cursor-move transition-colors", onDoubleClick: (e) => { e.stopPropagation(); e.preventDefault(); const newStrokes = [...draftStrokes]; newStrokes[i].points.splice(ptIdx, 1); newStrokes[i].d = getSvgPathFromStroke(newStrokes[i].points); setDraftStrokes(newStrokes); } })
+                      )
+                    )
+                  ),
+                  isDrawing && h("path", { d: activeStrokePoints.length > 0 ? `M ${activeStrokePoints[0][0]} ${activeStrokePoints[0][1]}` + activeStrokePoints.slice(1).map(p => ` L ${p[0]} ${p[1]}`).join("") : "", fill: "none", stroke: "rgba(239, 68, 68, 0.6)", strokeWidth: brushSize, strokeLinecap: "round", strokeLinejoin: "round" })
+                )
+              )
+            )
+          ),
+
+          // 主界面
+          h("div", { className: "w-full max-w-[1600px] h-[75vh] grid grid-cols-1 lg:grid-cols-3 gap-6" },
+            h("div", { className: "lg:col-span-1 bg-white rounded-2xl shadow-xl p-6 border border-stone-200 flex flex-col h-full overflow-hidden" },
+              h("div", { className: "flex items-center justify-between mb-6 shrink-0" },
+                h("h2", { className: "text-2xl font-serif font-bold text-stone-800 flex items-center gap-2" }, h(Feather, { className: "w-6 h-6 text-stone-600" }), "真迹还原系统")
+              ),
+              h("div", { className: "mb-6 shrink-0" },
+                h("input", { ref: fileInputRef, type: "file", accept: ".svg,.txt,.json", onChange: handleFileUpload, className: "hidden" }),
                 paths.length === 0
-                  ? h(
-                      "div",
-                      {
-                        onClick: () => fileInputRef.current?.click(),
-                        className:
-                          "border-2 border-dashed border-indigo-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/50 transition-all group",
-                      },
-                      h(Upload, {
-                        className:
-                          "w-12 h-12 mx-auto mb-3 text-indigo-400 group-hover:text-indigo-600 transition-colors",
-                      }),
-                      h(
-                        "p",
-                        { className: "text-stone-600 font-medium" },
-                        "点击上传文件"
-                      ),
-                      h(
-                        "p",
-                        { className: "text-stone-400 text-sm mt-1" },
-                        "支持 .svg 图像 或 .json 项目文件"
-                      )
+                  ? h("div", { onClick: () => fileInputRef.current?.click(), className: "border-2 border-dashed border-indigo-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/50 transition-all group" },
+                      h(Upload, { className: "w-12 h-12 mx-auto mb-3 text-indigo-400 group-hover:text-indigo-600 transition-colors" }),
+                      h("p", { className: "text-stone-600 font-medium" }, "点击上传文件"),
+                      h("p", { className: "text-stone-400 text-sm mt-1" }, "支持 .svg 图像 或 .json 项目文件")
                     )
-                  : h(
-                      "div",
-                      { className: "flex flex-col gap-2" },
-                      h(
-                        "div",
-                        {
-                          className:
-                            "bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between",
-                        },
-                        h(
-                          "div",
-                          { className: "flex items-center gap-3" },
-                          h(
-                            "div",
-                            {
-                              className:
-                                "w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center",
-                            },
-                            h(FileText, { className: "w-5 h-5 text-green-600" })
-                          ),
-                          h(
-                            "div",
-                            null,
-                            h(
-                              "p",
-                              {
-                                className: "text-sm font-medium text-green-800",
-                              },
-                              uploadedFileName
-                            ),
-                            h(
-                              "p",
-                              { className: "text-xs text-green-600" },
-                              `已加载 ${paths.length} 个笔画`
-                            )
-                          )
+                  : h("div", { className: "flex flex-col gap-2" },
+                      h("div", { className: "bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between" },
+                        h("div", { className: "flex items-center gap-3" },
+                          h("div", { className: "w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center" }, h(FileText, { className: "w-5 h-5 text-green-600" })),
+                          h("div", null, h("p", { className: "text-sm font-medium text-green-800" }, uploadedFileName), h("p", { className: "text-xs text-green-600" }, `已加载 ${paths.length} 个笔画`))
                         ),
-                        h(
-                          "div",
-                          { className: "flex gap-2" },
-                          h(
-                            "button",
-                            {
-                              onClick: () => fileInputRef.current?.click(),
-                              className:
-                                "px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors",
-                            },
-                            "更换"
-                          ),
-                          h(
-                            "button",
-                            {
-                              onClick: clearUploadedFile,
-                              className:
-                                "p-1.5 text-green-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors",
-                            },
-                            h(X, { size: 18 })
-                          )
+                        h("div", { className: "flex gap-2" },
+                          h("button", { onClick: () => fileInputRef.current?.click(), className: "px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors" }, "更换"),
+                          h("button", { onClick: () => { setPaths([]); setSvgInfo({}); setUploadedFileName(""); setRecordedStrokes({}); handleReset(); }, className: "p-1.5 text-green-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" }, h(X, { size: 18 }))
                         )
                       ),
-                      Object.keys(recordedStrokes).length > 0 &&
-                        h(
-                          "button",
-                          {
-                            onClick: handleExport,
-                            className:
-                              "w-full flex items-center justify-center gap-2 py-2 bg-stone-100 text-stone-600 border border-stone-200 rounded-xl hover:bg-stone-200 transition-colors text-sm font-bold",
-                          },
-                          h(Download, { size: 16 }),
-                          "保存当前进度 (.json)"
-                        )
+                      Object.keys(recordedStrokes).length > 0 && h("button", { onClick: handleExport, className: "w-full flex items-center justify-center gap-2 py-2 bg-stone-100 text-stone-600 border border-stone-200 rounded-xl hover:bg-stone-200 transition-colors text-sm font-bold" }, h(Download, { size: 16 }), "保存当前进度 (.json)")
                     )
               ),
-              h(
-                "div",
-                { className: "flex-1 overflow-y-auto px-2" },
-                paths.length > 0 &&
-                  h(
-                    React.Fragment,
-                    null,
-                    h(
-                      "div",
-                      { className: "flex justify-between items-end mb-2" },
-                      h(
-                        "h3",
-                        {
-                          className:
-                            "text-xs font-bold text-stone-500 uppercase tracking-wider",
-                        },
-                        "字形列表 & 录制"
+              h("div", { className: "flex-1 overflow-y-auto px-2" },
+                paths.length > 0 && h(React.Fragment, null,
+                  h("div", { className: "flex justify-between items-end mb-2" },
+                    h("h3", { className: "text-xs font-bold text-stone-500 uppercase tracking-wider" }, "字形列表 & 录制"),
+                    h("span", { className: "text-xs text-stone-400" }, `已录制: ${Object.keys(recordedStrokes).length} / ${paths.length}`)
+                  ),
+                  h("div", { className: "space-y-3 mb-8" }, paths.map((path, index) => {
+                    const hasRecording = !!recordedStrokes[path.id];
+                    const isCurrent = index === currentStep;
+                    const canSplit = splitCompoundPath(path.d).length > 1;
+                    return h("div", {
+                        key: path.id,
+                        className: `flex items-center justify-between p-3 rounded-xl border transition-all ${isCurrent ? "border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-500" : hoveredId === path.id ? "border-stone-400 bg-stone-100" : "border-stone-100 bg-white hover:border-stone-300"}`,
+                        onMouseEnter: () => setHoveredId(path.id), onMouseLeave: () => setHoveredId(null),
+                      },
+                      h("div", { className: "flex items-center space-x-3" },
+                        h("div", { className: `w-8 h-8 rounded-full flex items-center justify-center font-serif font-bold text-sm text-white ${isCurrent ? "bg-indigo-600" : hasRecording ? "bg-green-500" : "bg-stone-300"}` }, hasRecording ? "✓" : String.fromCharCode(65 + index)),
+                        h("div", { className: "flex flex-col" }, h("span", { className: "font-medium text-stone-700 font-serif" }, path.name), h("span", { className: "text-[10px] text-stone-400" }, hasRecording ? "已就绪" : "等待录制..."))
                       ),
-                      h(
-                        "span",
-                        { className: "text-xs text-stone-400" },
-                        `已录制: ${Object.keys(recordedStrokes).length} / ${
-                          paths.length
-                        }`
+                      h("div", { className: "flex items-center space-x-1" },
+                        canSplit && h("button", { onClick: () => startSplitting(path.id), className: "p-1.5 rounded text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 mr-1", title: "拆分复合笔画" }, h(Scissors, { size: 14 })),
+                        h("button", { onClick: () => startRecording(path.id), className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors ${hasRecording ? "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"}` }, hasRecording ? h(Edit3, { size: 12 }) : h(PenTool, { size: 12 }), hasRecording ? "编辑" : "录制"),
+                        h("div", { className: "w-px h-6 bg-stone-200 mx-1" }),
+                        h("button", { onClick: () => { const n = [...paths]; [n[index], n[index-1]] = [n[index-1], n[index]]; setPaths(n); }, disabled: index === 0 || isPlaying, className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500" }, h(ArrowUp, { size: 14 })),
+                        h("button", { onClick: () => { const n = [...paths]; [n[index], n[index+1]] = [n[index+1], n[index]]; setPaths(n); }, disabled: index === paths.length - 1 || isPlaying, className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500" }, h(ArrowDown, { size: 14 }))
                       )
-                    ),
-                    h(
-                      "div",
-                      { className: "space-y-3 mb-8" },
-                      paths.map((path, index) => {
-                        const hasRecording = !!recordedStrokes[path.id];
-                        const isCurrent = index === currentStep;
-                        const canSplit = splitCompoundPath(path.d).length > 1;
-
-                        return h(
-                          "div",
-                          {
-                            key: path.id,
-                            className: `flex items-center justify-between p-3 rounded-xl border transition-all ${
-                              isCurrent
-                                ? "border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-500"
-                                : hoveredId === path.id
-                                ? "border-stone-400 bg-stone-100"
-                                : "border-stone-100 bg-white hover:border-stone-300"
-                            }`,
-                            onMouseEnter: () => setHoveredId(path.id),
-                            onMouseLeave: () => setHoveredId(null),
-                          },
-                          h(
-                            "div",
-                            { className: "flex items-center space-x-3" },
-                            h(
-                              "div",
-                              {
-                                className: `w-8 h-8 rounded-full flex items-center justify-center font-serif font-bold text-sm text-white ${
-                                  isCurrent
-                                    ? "bg-indigo-600"
-                                    : hasRecording
-                                    ? "bg-green-500"
-                                    : "bg-stone-300"
-                                }`,
-                              },
-                              hasRecording
-                                ? "✓"
-                                : String.fromCharCode(65 + index)
-                            ),
-                            h(
-                              "div",
-                              { className: "flex flex-col" },
-                              h(
-                                "span",
-                                {
-                                  className:
-                                    "font-medium text-stone-700 font-serif",
-                                },
-                                path.name
-                              ),
-                              h(
-                                "span",
-                                { className: "text-[10px] text-stone-400" },
-                                hasRecording ? "已就绪" : "等待录制..."
-                              )
-                            )
-                          ),
-                          h(
-                            "div",
-                            { className: "flex items-center space-x-1" },
-
-                            canSplit &&
-                              h(
-                                "button",
-                                {
-                                  onClick: () => startSplitting(path.id),
-                                  className:
-                                    "p-1.5 rounded text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 mr-1",
-                                  title: "拆分复合笔画",
-                                },
-                                h(Scissors, { size: 14 })
-                              ),
-
-                            h(
-                              "button",
-                              {
-                                onClick: () => startRecording(path.id),
-                                className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors ${
-                                  hasRecording
-                                    ? "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50"
-                                    : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
-                                }`,
-                              },
-                              hasRecording
-                                ? h(Edit3, { size: 12 })
-                                : h(PenTool, { size: 12 }),
-                              hasRecording ? "编辑" : "录制"
-                            ),
-                            h("div", {
-                              className: "w-px h-6 bg-stone-200 mx-1",
-                            }),
-                            h(
-                              "button",
-                              {
-                                onClick: () => handleReorder(index, "up"),
-                                disabled: index === 0 || isPlaying,
-                                className:
-                                  "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500",
-                              },
-                              h(ArrowUp, { size: 14 })
-                            ),
-                            h(
-                              "button",
-                              {
-                                onClick: () => handleReorder(index, "down"),
-                                disabled:
-                                  index === paths.length - 1 || isPlaying,
-                                className:
-                                  "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500",
-                              },
-                              h(ArrowDown, { size: 14 })
-                            )
-                          )
-                        );
-                      })
-                    )
-                  )
+                    );
+                  }))
+                )
               ),
-              h(
-                "div",
-                {
-                  className: "mt-auto pt-6 border-t border-stone-200 shrink-0",
-                },
-                h(
-                  "div",
-                  {
-                    className:
-                      "flex items-center justify-between gap-4 bg-stone-100 p-2 rounded-xl",
-                  },
-
-                  h(
-                    "button",
-                    {
-                      onClick: handleReset,
-                      disabled: paths.length === 0,
-                      className:
-                        "p-3 text-stone-500 hover:bg-stone-200 rounded-lg transition-colors disabled:opacity-30",
-                      title: "重置",
-                    },
-                    h(RotateCcw, { size: 20 })
+              h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0" },
+                h("div", { className: "flex items-center justify-between gap-4 bg-stone-100 p-2 rounded-xl" },
+                  // 速度控制区域
+                  h("div", { className: "flex flex-col items-center gap-0 mr-2" },
+                    h("div", { className: "flex items-center gap-1 text-[10px] font-bold text-stone-400 mb-1" }, h(Zap, { size: 10 }), h("span", null, `${speed}x`)),
+                    h("input", {
+                        type: "range", min: "0.5", max: "5", step: "0.5",
+                        value: speed,
+                        onChange: (e) => setSpeed(parseFloat(e.target.value)),
+                        className: "w-16 h-1 bg-stone-300 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    })
                   ),
-                  h(
-                    "div",
-                    { className: "flex items-center gap-2" },
-                    h(
-                      "button",
-                      {
-                        onClick: handlePrevStep,
-                        disabled: paths.length === 0 || currentStep <= 0,
-                        className:
-                          "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30",
-                      },
-                      h(SkipBack, { size: 24 })
-                    ),
-
-                    h(
-                      "button",
-                      {
-                        onClick: handlePlayPause,
-                        disabled: paths.length === 0,
-                        className: `w-16 h-16 flex items-center justify-center rounded-full text-white shadow-lg transition-all transform hover:scale-105 active:scale-95 ${
-                          paths.length === 0
-                            ? "bg-stone-300"
-                            : isPlaying
-                            ? "bg-amber-500 hover:bg-amber-600"
-                            : "bg-indigo-600 hover:bg-indigo-700"
-                        }`,
-                      },
-                      isPlaying
-                        ? h(Pause, { size: 32, fill: "currentColor" })
-                        : h(Play, {
-                            size: 32,
-                            fill: "currentColor",
-                            className: "ml-1",
-                          })
-                    ),
-                    h(
-                      "button",
-                      {
-                        onClick: handleNextStep,
-                        disabled:
-                          paths.length === 0 || currentStep >= paths.length - 1,
-                        className:
-                          "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30",
-                      },
-                      h(SkipForward, { size: 24 })
-                    )
+                  h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-3 text-stone-500 hover:bg-stone-200 rounded-lg transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 20 })),
+                  h("div", { className: "flex items-center gap-2" },
+                    h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30" }, h(SkipBack, { size: 24 })),
+                    h("button", { onClick: handlePlayPause, disabled: paths.length === 0, className: `w-16 h-16 flex items-center justify-center rounded-full text-white shadow-lg transition-all transform hover:scale-105 active:scale-95 ${paths.length === 0 ? "bg-stone-300" : isPlaying ? "bg-amber-500 hover:bg-amber-600" : "bg-indigo-600 hover:bg-indigo-700"}` }, isPlaying ? h(Pause, { size: 32, fill: "currentColor" }) : h(Play, { size: 32, fill: "currentColor", className: "ml-1" })),
+                    h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length - 1, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length - 1, className: "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30" }, h(SkipForward, { size: 24 }))
                   ),
-                  h(
-                    "div",
-                    {
-                      className:
-                        "px-4 py-2 bg-white rounded-lg border border-stone-200 text-xs font-mono text-stone-500 min-w-[80px] text-center",
-                    },
-                    paths.length > 0
-                      ? `${Math.max(0, currentStep + 1)} / ${paths.length}`
-                      : "-- / --"
-                  )
+                  h("div", { className: "px-4 py-2 bg-white rounded-lg border border-stone-200 text-xs font-mono text-stone-500 min-w-[80px] text-center" }, paths.length > 0 ? `${Math.max(0, currentStep + 1)} / ${paths.length}` : "-- / --")
                 )
               )
             ),
-            h(
-              "div",
-              {
-                className:
-                  "lg:col-span-2 bg-[#f5f5f4] rounded-2xl shadow-inner flex flex-col items-center justify-center p-8 relative overflow-hidden border border-stone-300 h-full",
-              },
-              h("div", {
-                className:
-                  "absolute inset-0 opacity-40 pointer-events-none mix-blend-multiply",
-                style: {
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E")`,
-                },
-              }),
+            h("div", { className: "lg:col-span-2 bg-[#f5f5f4] rounded-2xl shadow-inner flex flex-col items-center justify-center p-8 relative overflow-hidden border border-stone-300 h-full" },
+              h("div", { className: "absolute inset-0 opacity-40 pointer-events-none mix-blend-multiply", style: { backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E")` } }),
               paths.length === 0
-                ? h(
-                    "div",
-                    { className: "relative z-10 text-center text-stone-400" },
-                    h(Upload, {
-                      className: "w-16 h-16 mx-auto mb-4 opacity-30",
-                    }),
-                    h(
-                      "p",
-                      { className: "text-lg font-medium" },
-                      "等待加载字形"
-                    ),
-                    h(
-                      "p",
-                      { className: "text-sm mt-2" },
-                      "上传 SVG 文件后将在此处显示预览"
-                    )
-                  )
-                : h(
-                    "div",
-                    {
-                      className:
-                        "relative z-10 p-4 w-full h-full flex items-center justify-center",
-                    },
-                    h(
-                      "svg",
-                      {
-                        width: "100%",
-                        height: "100%",
-                        viewBox: svgInfo.viewBox,
-                        preserveAspectRatio: "xMidYMid meet",
-                        className: "overflow-visible",
-                        style: {
-                          maxWidth: "100%",
-                          maxHeight: "100%",
-                        },
-                      },
-                      h(
-                        "g",
-                        null,
-                        paths.map((path, index) => {
-                          let status = "waiting";
-                          if (currentStep === -1) {
-                            status = "idle";
-                          } else {
-                            if (index < currentStep) status = "completed";
-                            else if (index === currentStep)
-                              status = "animating";
-                            else status = "waiting";
-                          }
-
-                          return h(AnimatedPath, {
-                            key: path.id,
-                            ...path,
-                            status: status,
-                            isPaused: !isPlaying,
-                            recordedStrokeData: recordedStrokes[path.id],
-                            totalDurationPerPath: DURATION_PER_PATH,
-                            isHovered: hoveredId === path.id,
-                            onHover: setHoveredId,
-                            onLeave: () => setHoveredId(null),
-                          });
-                        })
-                      )
+                ? h("div", { className: "relative z-10 text-center text-stone-400" }, h(Upload, { className: "w-16 h-16 mx-auto mb-4 opacity-30" }), h("p", { className: "text-lg font-medium" }, "等待加载字形"), h("p", { className: "text-sm mt-2" }, "上传 SVG 文件后将在此处显示预览"))
+                : h("div", { className: "relative z-10 p-4 w-full h-full flex items-center justify-center" },
+                    h("svg", { width: "100%", height: "100%", viewBox: svgInfo.viewBox, preserveAspectRatio: "xMidYMid meet", className: "overflow-visible", style: { maxWidth: "100%", maxHeight: "100%" } },
+                      h("g", null, paths.map((path, index) => {
+                        let status = "waiting";
+                        if (currentStep === -1) status = "idle";
+                        else if (index < currentStep) status = "completed";
+                        else if (index === currentStep) status = "animating";
+                        return h(AnimatedPath, { key: path.id, ...path, status, isPaused: !isPlaying, recordedStrokeData: recordedStrokes[path.id], totalDurationPerPath: BASE_DURATION / speed, isHovered: hoveredId === path.id, onHover: setHoveredId, onLeave: () => setHoveredId(null) });
+                      }))
                     )
                   )
             )
