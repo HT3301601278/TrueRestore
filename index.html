@@ -25,7 +25,7 @@
         Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
         Feather, PenTool, Sliders, Undo, Trash2, ZoomIn, Upload, FileText,
         X, Download, MousePointer2, Maximize2, Minimize2, Edit3, Scissors,
-        Check, GripVertical, Merge, Magnet, Cpu
+        Check, GripVertical, Merge, Magnet, Cpu, Zap
       } from "lucide-react";
 
       // --- 核心算法 (细化与骨架提取) ---
@@ -476,16 +476,18 @@
         const [splittingId, setSplittingId] = useState(null);
         const [splitDraft, setSplitDraft] = useState([]);
         const [selectedSplitIds, setSelectedSplitIds] = useState([]);
+        const [speed, setSpeed] = useState(1.0);
 
         const fileInputRef = useRef(null);
         const svgRef = useRef(null);
-        const DURATION_PER_PATH = 1000;
+        const BASE_DURATION = 1000;
         const DELAY_BETWEEN = 200;
 
         // --- 副作用 ---
         useEffect(() => {
           let timer;
           if (isPlaying && currentStep < paths.length) {
+            const dynamicDuration = BASE_DURATION / speed;
             if (currentStep === -1) {
               setCurrentStep(0);
             } else {
@@ -497,11 +499,11 @@
                   }
                   return prev + 1;
                 });
-              }, DURATION_PER_PATH + DELAY_BETWEEN);
+              }, dynamicDuration + DELAY_BETWEEN);
             }
           }
           return () => clearTimeout(timer);
-        }, [isPlaying, currentStep, paths.length]);
+        }, [isPlaying, currentStep, paths.length, speed]);
 
         useEffect(() => {
           if (recordingId) {
@@ -892,7 +894,7 @@
                 ),
                 h("div", { className: "flex items-center gap-2 flex-1 min-w-[150px]" },
                   h("label", { className: "font-bold text-slate-500 uppercase flex items-center gap-1 shrink-0" }, h(Sliders, { size: 12 }), " 笔刷"),
-                  h("input", { type: "range", min: "1", max: "10", step: "0.5", value: brushSize, onChange: (e) => setBrushSize(parseFloat(e.target.value)), className: "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" }),
+                  h("input", { type: "range", min: "1", max: "10", step: "0.1", value: brushSize, onChange: (e) => setBrushSize(parseFloat(e.target.value)), className: "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" }),
                   h("span", { className: "font-mono bg-white px-2 rounded border w-8 text-center" }, brushSize)
                 )
               ),
@@ -985,6 +987,16 @@
               ),
               h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0" },
                 h("div", { className: "flex items-center justify-between gap-4 bg-stone-100 p-2 rounded-xl" },
+                  // 速度控制区域
+                  h("div", { className: "flex flex-col items-center gap-0 mr-2" },
+                    h("div", { className: "flex items-center gap-1 text-[10px] font-bold text-stone-400 mb-1" }, h(Zap, { size: 10 }), h("span", null, `${speed}x`)),
+                    h("input", {
+                        type: "range", min: "0.5", max: "5", step: "0.5",
+                        value: speed,
+                        onChange: (e) => setSpeed(parseFloat(e.target.value)),
+                        className: "w-16 h-1 bg-stone-300 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                    })
+                  ),
                   h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-3 text-stone-500 hover:bg-stone-200 rounded-lg transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 20 })),
                   h("div", { className: "flex items-center gap-2" },
                     h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30" }, h(SkipBack, { size: 24 })),
@@ -1006,7 +1018,7 @@
                         if (currentStep === -1) status = "idle";
                         else if (index < currentStep) status = "completed";
                         else if (index === currentStep) status = "animating";
-                        return h(AnimatedPath, { key: path.id, ...path, status, isPaused: !isPlaying, recordedStrokeData: recordedStrokes[path.id], totalDurationPerPath: DURATION_PER_PATH, isHovered: hoveredId === path.id, onHover: setHoveredId, onLeave: () => setHoveredId(null) });
+                        return h(AnimatedPath, { key: path.id, ...path, status, isPaused: !isPlaying, recordedStrokeData: recordedStrokes[path.id], totalDurationPerPath: BASE_DURATION / speed, isHovered: hoveredId === path.id, onHover: setHoveredId, onLeave: () => setHoveredId(null) });
                       }))
                     )
                   )
