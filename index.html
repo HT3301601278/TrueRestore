@@ -25,7 +25,7 @@
         Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
         Feather, PenTool, Sliders, Undo, Trash2, ZoomIn, Upload, FileText,
         X, Download, MousePointer2, Maximize2, Minimize2, Edit3, Scissors,
-        Check, GripVertical, Merge, Magnet, Cpu, Zap
+        Check, GripVertical, Merge, Magnet, Cpu, Zap, ChevronDown, Layers, Sparkles
       } from "lucide-react";
 
       // --- 核心算法 (细化与骨架提取) ---
@@ -368,6 +368,13 @@
         return `${minX - padding} ${minY - padding} ${width + padding * 2} ${height + padding * 2}`;
       };
 
+      // --- 常量定义 ---
+      const ALGORITHMS = [
+        { id: "zhang-suen", name: "标准骨架 (Standard)", desc: "经典细化算法，保留细节", icon: Layers },
+        { id: "guo-hall", name: "极简骨架 (Fast)", desc: "速度较快，线条更简练", icon: Zap },
+        { id: "optimized", name: "智能优化 (Smart)", desc: "自动去噪与线条平滑", icon: Sparkles },
+      ];
+
       // --- 组件 ---
 
       const AnimatedPath = ({ d, color, status, isPaused, totalDurationPerPath, id, isHovered, onHover, onLeave, recordedStrokeData }) => {
@@ -468,6 +475,7 @@
         const [isFullScreen, setIsFullScreen] = useState(false);
 
         const [selectedAlgorithm, setSelectedAlgorithm] = useState("zhang-suen");
+        const [showAlgoMenu, setShowAlgoMenu] = useState(false);
         const [skeletonPoints, setSkeletonPoints] = useState([]);
         const [skeletonImg, setSkeletonImg] = useState(null);
         const [useMagnet, setUseMagnet] = useState(true);
@@ -818,9 +826,13 @@
         // --- 渲染 UI ---
         const h = React.createElement;
         const controlPointSize = recordingViewBox ? parseFloat(recordingViewBox.split(" ")[2]) / 120 : 1;
+        const currentAlgoObj = ALGORITHMS.find(a => a.id === selectedAlgorithm) || ALGORITHMS[0];
 
         return h("div", { className: "flex flex-col items-center justify-center h-screen bg-stone-100 p-4 font-sans text-stone-800 select-none overflow-hidden" },
           h("style", null, `@keyframes dash { to { stroke-dashoffset: 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`),
+          
+          // 遮罩层 (用于关闭菜单)
+          showAlgoMenu && h("div", { className: "fixed inset-0 z-40", onClick: () => setShowAlgoMenu(false) }),
 
           // 拆分弹窗
           splittingId && h("div", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm" },
@@ -882,20 +894,46 @@
                   h("button", { onClick: saveRecording, className: "px-4 py-1 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold" }, "保存")
                 )
               ),
-              h("div", { className: "mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex flex-wrap gap-4 shrink-0 text-xs items-center" },
-                h("div", { className: "flex items-center gap-2 border-r border-indigo-200 pr-4" },
-                  h(Cpu, { size: 14, className: "text-indigo-600" }),
-                  h("select", { value: selectedAlgorithm, onChange: (e) => setSelectedAlgorithm(e.target.value), className: "bg-white border border-indigo-200 rounded px-1 py-0.5 text-xs text-indigo-800 focus:outline-none" },
-                    h("option", { value: "zhang-suen" }, "Zhang-Suen 细化"),
-                    h("option", { value: "guo-hall" }, "Guo-Hall 细化"),
-                    h("option", { value: "optimized" }, "内切圆优化 (去毛刺)")
+              h("div", { className: "mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex flex-wrap gap-4 shrink-0 text-xs items-center relative z-20" },
+                // --- 算法选择器 (新) ---
+                h("div", { className: "flex items-center gap-3 border-r border-indigo-200 pr-4 relative" },
+                  h("div", { className: "relative" },
+                    h("button", {
+                      onClick: () => setShowAlgoMenu(!showAlgoMenu),
+                      className: "flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-indigo-700 hover:bg-indigo-50 transition-all shadow-sm active:scale-95",
+                    },
+                      h(currentAlgoObj.icon, { size: 14 }),
+                      h("span", { className: "font-medium" }, currentAlgoObj.name.split(" ")[0]),
+                      h(ChevronDown, { size: 14, className: `transition-transform duration-200 ${showAlgoMenu ? "rotate-180" : ""}` })
+                    ),
+                    showAlgoMenu && h("div", { className: "absolute top-full left-0 mt-2 w-56 bg-white border border-indigo-100 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200" },
+                      ALGORITHMS.map(opt => 
+                        h("button", {
+                          key: opt.id,
+                          onClick: () => { setSelectedAlgorithm(opt.id); setShowAlgoMenu(false); },
+                          className: `w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${selectedAlgorithm === opt.id ? "bg-indigo-50" : "hover:bg-slate-50"}`
+                        },
+                          h("div", { className: `mt-0.5 ${selectedAlgorithm === opt.id ? "text-indigo-600" : "text-slate-400"}` }, h(opt.icon, { size: 16 })),
+                          h("div", { className: "flex flex-col" },
+                             h("span", { className: `text-sm font-bold ${selectedAlgorithm === opt.id ? "text-indigo-700" : "text-slate-700"}` }, opt.name),
+                             h("span", { className: "text-[10px] text-slate-400 mt-0.5" }, opt.desc)
+                          ),
+                          selectedAlgorithm === opt.id && h(Check, { size: 14, className: "ml-auto text-indigo-600 mt-1" })
+                        )
+                      )
+                    )
                   ),
-                  h("button", { onClick: () => setUseMagnet(!useMagnet), className: `flex items-center gap-1 px-2 py-0.5 rounded transition-colors border ${useMagnet ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-300"}` }, h(Magnet, { size: 12 }), useMagnet ? "吸附开" : "吸附关")
+                  
+                  h("button", {
+                    onClick: () => setUseMagnet(!useMagnet),
+                    className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all border text-xs font-medium ${useMagnet ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-slate-500 border-indigo-200 hover:bg-indigo-50"}` 
+                  }, h(Magnet, { size: 14 }), useMagnet ? "磁吸开启" : "磁吸关闭")
                 ),
+
                 h("div", { className: "flex items-center gap-2 flex-1 min-w-[150px]" },
-                  h("label", { className: "font-bold text-slate-500 uppercase flex items-center gap-1 shrink-0" }, h(Sliders, { size: 12 }), " 笔刷"),
-                  h("input", { type: "range", min: "1", max: "10", step: "0.1", value: brushSize, onChange: (e) => setBrushSize(parseFloat(e.target.value)), className: "w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" }),
-                  h("span", { className: "font-mono bg-white px-2 rounded border w-8 text-center" }, brushSize)
+                  h("label", { className: "font-bold text-slate-500 uppercase flex items-center gap-1 shrink-0 text-[10px]" }, h(Sliders, { size: 12 }), " 笔刷"),
+                  h("input", { type: "range", min: "1", max: "10", step: "0.1", value: brushSize, onChange: (e) => setBrushSize(parseFloat(e.target.value)), className: "w-full h-1.5 bg-indigo-100 rounded-lg appearance-none cursor-pointer accent-indigo-600" }),
+                  h("span", { className: "font-mono bg-white px-2 py-0.5 rounded border border-indigo-100 text-center text-indigo-600 font-bold" }, brushSize)
                 )
               ),
               h("div", { className: `border-2 border-dashed border-indigo-200 rounded-xl bg-white flex justify-center p-0 relative overflow-hidden cursor-crosshair flex-1 transition-all ${isFullScreen ? "h-full" : "h-[300px]"}` },
