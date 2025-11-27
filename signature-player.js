@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useId } from "react";
+import React, { useState, useEffect, useRef, useId, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 
 // --- 样式注入 ---
@@ -10,12 +10,13 @@ if (!document.getElementById(styleId)) {
   document.head.appendChild(style);
 }
 
-// --- 核心配置 ---
-const CONFIG = {
-  duration: 1000, // 单笔画书写/擦除耗时
-  delay: 100, // 笔画间的停顿
-  loopDelay: 2000, // 写完后，停顿多久开始倒回
-  eraseDelay: 500, // 倒回完后，停顿多久开始重写
+// --- 默认配置 ---
+const DEFAULT_CONFIG = {
+  loop: true,       // 是否循环播放 (书写 -> 擦除 -> 书写)
+  duration: 1000,   // 单笔画书写/擦除耗时 (毫秒)，数值越小速度越快
+  delay: 100,       // 笔画间的停顿 (毫秒)
+  loopDelay: 2000,  // 写完后，停顿多久开始倒回 (仅在 loop=true 时有效)
+  eraseDelay: 500,  // 倒回完后，停顿多久开始重写 (仅在 loop=true 时有效)
 };
 
 // --- 单笔画组件 ---
@@ -26,6 +27,7 @@ const AnimatedPath = ({
   currentStep,
   direction,
   recordedStrokeData,
+  config
 }) => {
   const strokeRef = useRef(null);
   const [len, setLen] = useState(0);
@@ -50,8 +52,6 @@ const AnimatedPath = ({
     targetOffset = len;
   } else {
     // === 当前笔画 ===
-    // 书写(1) -> 偏移量归0 (显示)
-    // 擦除(-1) -> 偏移量归最大 (隐藏)
     if (direction === 1) {
       targetOpacity = 1;
       targetOffset = 0;
@@ -62,7 +62,7 @@ const AnimatedPath = ({
   }
 
   const transitionStyle = {
-    transition: `stroke-dashoffset ${CONFIG.duration}ms ease-in-out, opacity ${CONFIG.duration}ms ease-in-out`,
+    transition: `stroke-dashoffset ${config.duration}ms ease-in-out, opacity ${config.duration}ms ease-in-out`,
   };
 
   // 模式 A: 笔锋模式 (Mask 动画)
@@ -94,7 +94,6 @@ const AnimatedPath = ({
         d: d,
         fill: color || "#000",
         mask: `url(#${maskId})`,
-
         style: {
           opacity: index > currentStep ? 0 : 1,
           transition: "opacity 0.2s",
@@ -112,10 +111,13 @@ const AnimatedPath = ({
 };
 
 // --- 播放器主体 ---
-const SignaturePlayer = ({ jsonUrl }) => {
+const SignaturePlayer = ({ jsonUrl, options = {} }) => {
   const [data, setData] = useState(null);
   const [step, setStep] = useState(-1);
   const [direction, setDirection] = useState(1); // 1:书写, -1:倒回
+
+  // 合并配置
+  const config = useMemo(() => ({ ...DEFAULT_CONFIG, ...options }), [options]);
 
   // 加载数据
   useEffect(() => {
@@ -128,7 +130,7 @@ const SignaturePlayer = ({ jsonUrl }) => {
           setTimeout(() => setStep(0), 500);
         }
       })
-      .catch((e) => console.error("Load failed:", e));
+      .catch((e) => console.error("Trace Restore: Load failed:", e));
   }, [jsonUrl]);
 
   // 循环控制器
@@ -136,31 +138,36 @@ const SignaturePlayer = ({ jsonUrl }) => {
     if (!data) return;
     let timer;
     const total = data.paths.length;
+    
     const nextTick = () => {
       if (direction === 1) {
         // --- 正向书写 ---
         if (step < total - 1) {
           setStep((s) => s + 1);
         } else {
-          // 写完 -> 等待 -> 切换为倒回
-          timer = setTimeout(() => setDirection(-1), CONFIG.loopDelay);
+          // 书写完毕
+          if (config.loop) {
+             // 只有开启循环，才进行倒回
+            timer = setTimeout(() => setDirection(-1), config.loopDelay);
+          }
+          // 如果 loop=false，则停止在这里，不做任何操作
           return;
         }
       } else {
-        // --- 反向擦除 ---
+        // --- 反向擦除 (仅在 loop=true 时会进入此分支) ---
         if (step > 0) {
           setStep((s) => s - 1);
         } else {
           // 擦完 -> 等待 -> 切换为书写
-          timer = setTimeout(() => setDirection(1), CONFIG.eraseDelay);
+          timer = setTimeout(() => setDirection(1), config.eraseDelay);
           return;
         }
       }
     };
 
-    timer = setTimeout(nextTick, CONFIG.duration + CONFIG.delay);
+    timer = setTimeout(nextTick, config.duration + config.delay);
     return () => clearTimeout(timer);
-  }, [step, direction, data]);
+  }, [step, direction, data, config]);
 
   if (!data) return null;
 
@@ -180,19 +187,30 @@ const SignaturePlayer = ({ jsonUrl }) => {
         d: path.d,
         color: path.color,
         recordedStrokeData: data.recordedStrokes?.[path.id],
+        config: config
       })
     )
   );
 };
 
 // --- 导出挂载函数 ---
-export function mountSignature(container, jsonUrl) {
+/**
+ * 挂载签名动画
+ * @param {string|HTMLElement} container 容器ID或DOM元素
+ * @param {string} jsonUrl 动画数据文件路径
+ * @param {Object} [options] 配置项
+ * @param {boolean} [options.loop=true] 是否循环播放
+ * @param {number} [options.duration=1000] 单笔画书写耗时(ms)
+ * @param {number} [options.delay=100] 笔画间停顿(ms)
+ * @param {number} [options.loopDelay=2000] 写完后的停留时间(ms)
+ */
+export function mountSignature(container, jsonUrl, options) {
   const dom =
     typeof container === "string"
       ? document.getElementById(container)
       : container;
   if (!dom) return;
   const root = createRoot(dom);
-  root.render(React.createElement(SignaturePlayer, { jsonUrl }));
+  root.render(React.createElement(SignaturePlayer, { jsonUrl, options }));
   return root;
 }

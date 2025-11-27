@@ -14,7 +14,7 @@
   - **项目保存**：导出为 `.json` 格式，包含原始路径和动画蒙版数据。
 - **轻量级播放器 (`signature-player.js`)**：
   - 零依赖（仅需 React），基于 ESM 模块化设计。
-  - 支持“书写 -> 停留 -> 擦除 -> 循环”的播放逻辑。
+  - **可配置**：支持控制是否循环播放、书写速度、停顿时间。
   - 真实还原笔锋效果。
 
 ## 快速开始
@@ -97,18 +97,10 @@
 
   // 参数1: 容器 ID 或 DOM 元素
   // 参数2: JSON 数据文件的路径
-  mountSignature("my-signature", "./your-export-file.json");
+  // 参数3: 配置对象 (可选)
+  mountSignature("my-signature", "./your-export-file.json", {
+    loop: false,      // 设置为 false 则写完即停，不进行循环擦除
+    duration: 800,    // 单个笔画书写耗时(ms)，数值越小写得越快
+    loopDelay: 3000   // 如果开启循环，写完后停留多久(ms)
+  });
 </script>
-```
-### 配置调整
-
-如果你需要修改动画速度，可以编辑 `signature-player.js` 顶部的 `CONFIG` 对象：
-
-```javascript
-const CONFIG = {
-  duration: 1000,   // 单笔画书写耗时 (毫秒)
-  delay: 100,       // 笔画间的停顿
-  loopDelay: 2000,  // 写完后停顿多久开始倒回
-  eraseDelay: 500,  // 倒回完后停顿多久开始重写
-};
-```
