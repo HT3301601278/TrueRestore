@@ -832,12 +832,23 @@
                   }))
                 )
               ),
-              h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0" },
-                h("div", { className: "flex items-center justify-between gap-4 bg-stone-100 p-2 rounded-xl" },
-                  h("div", { className: "flex flex-col items-center gap-0 mr-2" }, h("div", { className: "flex items-center gap-1 text-[10px] font-bold text-stone-400 mb-1" }, h(Zap, { size: 10 }), h("span", null, `${speed}x`)), h("input", { type: "range", min: "0.5", max: "5", step: "0.5", value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: "w-16 h-1 bg-stone-300 rounded-lg appearance-none cursor-pointer accent-indigo-500" })),
-                  h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-3 text-stone-500 hover:bg-stone-200 rounded-lg transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 20 })),
-                  h("div", { className: "flex items-center gap-2" }, h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30" }, h(SkipBack, { size: 24 })), h("button", { onClick: handlePlayPause, disabled: paths.length === 0, className: `w-16 h-16 flex items-center justify-center rounded-full text-white shadow-lg transition-all transform hover:scale-105 active:scale-95 ${paths.length === 0 ? "bg-stone-300" : isPlaying ? "bg-amber-500 hover:bg-amber-600" : "bg-indigo-600 hover:bg-indigo-700"}` }, isPlaying ? h(Pause, { size: 32, fill: "currentColor" }) : h(Play, { size: 32, fill: "currentColor", className: "ml-1" })), h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length - 1, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length - 1, className: "p-3 text-stone-600 hover:bg-white hover:shadow-sm rounded-lg transition-all disabled:opacity-30" }, h(SkipForward, { size: 24 }))),
-                  h("div", { className: "px-4 py-2 bg-white rounded-lg border border-stone-200 text-xs font-mono text-stone-500 min-w-[80px] text-center" }, paths.length > 0 ? `${Math.max(0, currentStep + 1)} / ${paths.length}` : "-- / --")
+              h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0 relative" },
+                h("div", { className: "bg-white border border-stone-100 rounded-2xl shadow-xl shadow-stone-200/50 p-4 flex items-center justify-between relative overflow-visible" },
+                  h("div", { className: "flex items-center gap-3 w-1/3 z-10" },
+                    h("div", { className: "flex items-center gap-2 bg-stone-50 rounded-full px-3 py-1.5 border border-stone-100 transition-all hover:border-stone-300" },
+                      h(Zap, { size: 12, className: "text-amber-500" }),
+                      h("input", { type: "range", min: "0.5", max: "5", step: "0.5", value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: "w-16 h-1 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-500" })
+                    ),
+                    h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-full transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 16 }))
+                  ),
+                  h("div", { className: "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 z-20" },
+                    h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipBack, { size: 20 })),
+                    h("button", { onClick: handlePlayPause, disabled: paths.length === 0, className: `w-14 h-14 flex items-center justify-center rounded-full text-white shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 ${paths.length === 0 ? "bg-stone-200 shadow-none cursor-not-allowed" : isPlaying ? "bg-amber-500" : "bg-indigo-600"}` }, isPlaying ? h(Pause, { size: 24, fill: "currentColor" }) : h(Play, { size: 24, fill: "currentColor", className: "ml-1" })),
+                    h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length - 1, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length - 1, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipForward, { size: 20 }))
+                  ),
+                  h("div", { className: "flex justify-end w-1/3 z-10" },
+                    h("div", { className: "px-3 py-1.5 bg-stone-50 rounded-lg border border-stone-100 text-xs font-mono font-medium text-stone-500 min-w-[70px] text-center" }, paths.length > 0 ? `${Math.max(0, currentStep + 1)} / ${paths.length}` : "--")
+                  )
                 )
               )
             ),
