@@ -749,7 +749,7 @@
                   h("label", { className: `font-bold uppercase flex items-center gap-1 shrink-0 text-[10px] ${editorMode === "select" ? "text-amber-600" : "text-slate-400"}` }, h(Sliders, { size: 12 }), editorMode === "select" ? (selectedStrokeIndex !== null ? "调整粗细" : "选择笔画") : "绘画模式"),
                   h("input", { 
                     type: "range", min: "1", max: "30", step: "0.5", 
-                    disabled: editorMode === "draw",
+                    disabled: editorMode === "draw" || (editorMode === "select" && selectedStrokeIndex === null),
                     value: selectedStrokeIndex !== null ? (draftStrokes[selectedStrokeIndex].width || 8) : brushSize, 
                     onChange: (e) => {
                       const v = parseFloat(e.target.value);
@@ -764,7 +764,7 @@
                          setBrushSize(v);
                       }
                     }, 
-                    className: `w-full h-1.5 rounded-lg appearance-none ${editorMode === "draw" ? "bg-stone-200 cursor-not-allowed" : (selectedStrokeIndex !== null ? "bg-amber-100 accent-amber-500 cursor-pointer" : "bg-indigo-100 accent-indigo-600 cursor-pointer")}` 
+                    className: `w-full h-1.5 rounded-lg appearance-none ${(editorMode === "draw" || (editorMode === "select" && selectedStrokeIndex === null)) ? "bg-stone-200 cursor-not-allowed" : "bg-amber-100 accent-amber-500 cursor-pointer"}` 
                   }),
                   h("span", { className: `font-mono bg-white px-2 py-0.5 rounded border text-center font-bold ${editorMode === "draw" ? "text-stone-300 border-stone-200" : (selectedStrokeIndex !== null ? "border-amber-200 text-amber-600" : "border-indigo-100 text-indigo-600")}` }, selectedStrokeIndex !== null ? (draftStrokes[selectedStrokeIndex].width || 8) : brushSize)
                 )
@@ -836,9 +836,9 @@
               h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0 relative" },
                 h("div", { className: "bg-white border border-stone-100 rounded-2xl shadow-xl shadow-stone-200/50 p-4 flex items-center justify-between relative overflow-visible" },
                   h("div", { className: "flex items-center gap-3 w-1/3 z-10" },
-                    h("div", { className: "flex items-center gap-1.5 bg-stone-50 rounded-full px-2 py-1.5 border border-stone-100 transition-all hover:border-stone-300 group" },
+                    h("div", { className: `flex items-center gap-1.5 bg-stone-50 rounded-full px-2 py-1.5 border border-stone-100 transition-all ${paths.length === 0 ? "opacity-50 cursor-not-allowed" : "hover:border-stone-300 group"}` },
                       h(Snail, { size: 12, className: "text-stone-400 group-hover:text-stone-600 transition-colors" }),
-                      h("input", { type: "range", min: "0.5", max: "5", step: "0.5", value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: "w-14 h-1 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-500" }),
+                      h("input", { type: "range", min: "0.5", max: "5", step: "0.5", disabled: paths.length === 0, value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: `w-14 h-1 bg-stone-200 rounded-lg appearance-none ${paths.length === 0 ? "cursor-not-allowed" : "cursor-pointer accent-amber-500"}` }),
                       h(Zap, { size: 12, className: "text-amber-500 fill-amber-500" })
                     ),
                     h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-full transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 16 }))
