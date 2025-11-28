@@ -31,32 +31,35 @@ const AnimatedPath = ({ d, color, index, currentStep, direction, recordedStrokeD
   const isWaiting = index > currentStep;
   const isCurrent = index === currentStep;
   
-  useEffect(() => {
-    if (!recordedStrokeData) {
-      setSegments([]);
-      return;
-    }
-
+  const measuredSegments = useMemo(() => {
+    if (!recordedStrokeData) return [];
     const raw = recordedStrokeData.rawStrokes && recordedStrokeData.rawStrokes.length > 0
        ? recordedStrokeData.rawStrokes 
        : [{ d: recordedStrokeData.d, width: recordedStrokeData.width }];
     
-    const measured = raw.map(s => {
+    return raw.map(s => {
       const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
       el.setAttribute("d", s.d);
       return { d: s.d, width: s.width || recordedStrokeData.width || 12, len: el.getTotalLength() };
     });
+  }, [recordedStrokeData]);
 
-    const totalLen = measured.reduce((sum, s) => sum + s.len, 0);
+  useEffect(() => {
+    if (!recordedStrokeData || measuredSegments.length === 0) {
+      setSegments([]);
+      return;
+    }
+
+    const totalLen = measuredSegments.reduce((sum, s) => sum + s.len, 0);
     let accumulatedDelay = 0;
     
-    setSegments(measured.map(s => {
+    setSegments(measuredSegments.map(s => {
       const segDuration = totalLen > 0 ? (s.len / totalLen) * config.duration : 0;
       const delay = accumulatedDelay;
       accumulatedDelay += segDuration;
       return { ...s, duration: segDuration, delay };
     }));
-  }, [recordedStrokeData, config.duration]);
+  }, [recordedStrokeData, config.duration, measuredSegments]);
 
   // 无录制数据时的简单回退模式
   if (!recordedStrokeData || segments.length === 0) {

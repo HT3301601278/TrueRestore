@@ -23,7 +23,7 @@
   <div id="root"></div>
 
   <script type="module">
-    import React, { useState, useEffect, useRef } from "react";
+    import React, { useState, useEffect, useRef, useMemo } from "react";
     import { createRoot } from "react-dom/client";
     import {
       Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
@@ -135,43 +135,8 @@
       return tempGrid;
     }
 
-    function optimizeIntersections(skeletonData, originalBinaryData, w, h) {
+    function optimizeIntersections(skeletonData, w, h) {
       let pixels = new Int8Array(skeletonData);
-      let junctions = [];
-      const getSkel = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? pixels[y * w + x] : 0);
-      const getOrig = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? originalBinaryData[y * w + x] : 0);
-
-      for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-          if (getSkel(x, y) === 1) {
-            let nSum = 0;
-            for (let dy = -1; dy <= 1; dy++)
-              for (let dx = -1; dx <= 1; dx++)
-                if ((dx !== 0 || dy !== 0) && getSkel(x + dx, y + dy) === 1) nSum++;
-
-            if (nSum >= 3) {
-              let r = 1;
-              let safe = true;
-              while (safe && r < 50) {
-                for (let ky = -r; ky <= r; ky++) {
-                  for (let kx = -r; kx <= r; kx++) {
-                    if (kx * kx + ky * ky <= r * r) {
-                      if (getOrig(x + kx, y + ky) === 0) {
-                        safe = false;
-                        break;
-                      }
-                    }
-                  }
-                  if (!safe) break;
-                }
-                if (safe) r++;
-              }
-              junctions.push({ x, y, r: r - 1 });
-            }
-          }
-        }
-      }
-
       const pruneLimit = 3;
       for (let k = 0; k < pruneLimit; k++) {
         let toPrune = [];
@@ -227,7 +192,7 @@
         thinnedData = guoHallThinning(binData, canvasW, canvasH);
       } else if (algorithm === "optimized") {
         const zs = zhangSuenThinning(binData, canvasW, canvasH);
-        thinnedData = optimizeIntersections(zs, binData, canvasW, canvasH);
+        thinnedData = optimizeIntersections(zs, canvasW, canvasH);
       } else {
         thinnedData = zhangSuenThinning(binData, canvasW, canvasH);
       }
@@ -382,26 +347,28 @@
       const isVisible = status === "completed" || status === "idle" || isHovered;
       const isAnimating = status === "animating";
 
-      useEffect(() => {
-        if (!recordedStrokeData) {
-          setSegments([]);
-          return;
-        }
-
+      const measuredSegments = useMemo(() => {
+        if (!recordedStrokeData) return [];
         const raw = recordedStrokeData.rawStrokes && recordedStrokeData.rawStrokes.length > 0
           ? recordedStrokeData.rawStrokes
           : [{ d: recordedStrokeData.d, width: recordedStrokeData.width }];
-
-        const measured = raw.map(s => {
+        return raw.map((s) => {
           const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
           el.setAttribute("d", s.d);
           return { d: s.d, width: s.width || 8, len: el.getTotalLength() };
         });
+      }, [recordedStrokeData]);
 
-        const totalLen = measured.reduce((sum, s) => sum + s.len, 0);
+      useEffect(() => {
+        if (!recordedStrokeData || measuredSegments.length === 0) {
+          setSegments([]);
+          return;
+        }
+
+        const totalLen = measuredSegments.reduce((sum, s) => sum + s.len, 0);
 
         let accumulatedDelay = 0;
-        const finalSegments = measured.map(s => {
+        const finalSegments = measuredSegments.map((s) => {
           const duration = totalLen > 0 ? (s.len / totalLen) * totalDurationPerPath : 0;
           const delay = accumulatedDelay;
           accumulatedDelay += duration;
@@ -409,7 +376,7 @@
         });
 
         setSegments(finalSegments);
-      }, [recordedStrokeData, totalDurationPerPath]);
+      }, [recordedStrokeData, totalDurationPerPath, measuredSegments]);
 
       const maskId = `mask-${id}`;
 
@@ -497,6 +464,23 @@
       const [speed, setSpeed] = useState(1.0);
       const [editorMode, setEditorMode] = useState("draw");
       const [selectedStrokeIndex, setSelectedStrokeIndex] = useState(null);
+
+      const skeletonSpatial = useMemo(() => {
+        if (!recordingViewBox || skeletonPoints.length === 0) return null;
+        const [vbX, vbY, vbW] = recordingViewBox.split(" ").map(Number);
+        const threshold = vbW * 0.05;
+        const cell = Math.max(threshold, vbW / 300);
+        const grid = new Map();
+        for (let i = 0; i < skeletonPoints.length; i++) {
+          const pt = skeletonPoints[i];
+          const cx = Math.floor((pt[0] - vbX) / cell);
+          const cy = Math.floor((pt[1] - vbY) / cell);
+          const key = `${cx},${cy}`;
+          if (!grid.has(key)) grid.set(key, []);
+          grid.get(key).push(pt);
+        }
+        return { grid, cell, threshold, originX: vbX, originY: vbY };
+      }, [skeletonPoints, recordingViewBox]);
 
       const handlePathHover = React.useCallback((id) => setHoveredId(id), []);
       const handlePathLeave = React.useCallback(() => setHoveredId(null), []);
@@ -678,24 +662,32 @@
       };
 
       const snapToSkeleton = (pt, lastPt) => {
-        if (!useMagnet || skeletonPoints.length === 0) return pt;
-        const viewBoxWidth = parseFloat(recordingViewBox.split(" ")[2]);
-        const threshold = viewBoxWidth * 0.05;
+        if (!useMagnet || !skeletonSpatial) return pt;
+        const { grid, cell, threshold, originX, originY } = skeletonSpatial;
         const thresholdSq = threshold * threshold;
-        let minDistSq = Infinity;
+        const cellX = Math.floor((pt[0] - originX) / cell);
+        const cellY = Math.floor((pt[1] - originY) / cell);
+        let minDistSq = thresholdSq;
         let nearestPt = null;
 
-        for (let sp of skeletonPoints) {
-          const dx = pt[0] - sp[0];
-          const dy = pt[1] - sp[1];
-          const distSq = dx * dx + dy * dy;
-          if (distSq < minDistSq) {
-            minDistSq = distSq;
-            nearestPt = sp;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const bucket = grid.get(`${cellX + dx},${cellY + dy}`);
+            if (!bucket) continue;
+            for (let i = 0; i < bucket.length; i++) {
+              const sp = bucket[i];
+              const dxPt = pt[0] - sp[0];
+              const dyPt = pt[1] - sp[1];
+              const distSq = dxPt * dxPt + dyPt * dyPt;
+              if (distSq < minDistSq) {
+                minDistSq = distSq;
+                nearestPt = sp;
+              }
+            }
           }
         }
 
-        if (!nearestPt || minDistSq > thresholdSq) return pt;
+        if (!nearestPt) return pt;
 
         if (lastPt) {
           const jumpDist = getDistance(nearestPt, lastPt);
@@ -1179,13 +1171,15 @@
                     h(Snail, { size: 12, className: "text-stone-400 group-hover:text-stone-600 transition-colors" }),
                     h("input", { type: "range", min: "0.5", max: "5", step: "0.5", disabled: paths.length === 0, value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: `w-14 h-1 bg-stone-200 rounded-lg appearance-none ${paths.length === 0 ? "cursor-not-allowed" : "cursor-pointer accent-amber-500"}` }),
                     h(Zap, { size: 12, className: "text-amber-500 fill-amber-500" })
-                  ),
-                  h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-full transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 16 }))
+                  )
                 ),
                 h("div", { className: "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 z-20" },
                   h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipBack, { size: 20 })),
                   h("button", { onClick: handlePlayPause, disabled: paths.length === 0, className: `w-14 h-14 flex items-center justify-center rounded-full text-white shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 ${paths.length === 0 ? "bg-stone-200 shadow-none cursor-not-allowed" : isPlaying ? "bg-amber-500" : "bg-indigo-600"}` }, isPlaying ? h(Pause, { size: 24, fill: "currentColor" }) : h(Play, { size: 24, fill: "currentColor", className: "ml-1" })),
-                  h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipForward, { size: 20 }))
+                  h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipForward, { size: 20 })),
+                  h("div", { className: "absolute left-full ml-4 flex" },
+                    h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-full transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 16 }))
+                  )
                 ),
                 h("div", { className: "flex justify-end w-1/3 z-10" },
                   h("div", { className: "px-3 py-1.5 bg-stone-50 rounded-lg border border-stone-100 text-xs font-mono font-medium text-stone-500 min-w-[70px] text-center" }, paths.length > 0 ? (currentStep >= paths.length ? "完成" : `${Math.max(0, currentStep + 1)} / ${paths.length}`) : "--")
