@@ -1,927 +1,1232 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8">
-    <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg" type="image/svg+xml">
-    <link rel="alternate icon" href="https://github.com/favicon.ico" sizes="any">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>真迹还原系统</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script type="importmap">
-      {
-        "imports": {
-          "react": "https://esm.sh/react@18.2.0",
-          "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-          "lucide-react": "https://esm.sh/lucide-react@0.294.0"
-        }
+
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="https://github.githubassets.com/favicons/favicon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="https://github.com/favicon.ico" sizes="any">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>真迹还原系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.294.0"
       }
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
+    }
+  </script>
+</head>
 
-    <script type="module">
-      import React, { useState, useEffect, useRef } from "react";
-      import { createRoot } from "react-dom/client";
-      import {
-        Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
-        Feather, PenTool, Sliders, Undo, Trash2, ZoomIn, Upload, FileText,
-        X, Download, MousePointer2, Maximize2, Minimize2, Edit3, Scissors,
-        Check, GripVertical, Merge, Magnet, Cpu, Zap, ChevronDown, Layers,
-        Sparkles,Snail
-      } from "lucide-react";
+<body>
+  <div id="root"></div>
 
-      // --- 核心算法 ---
+  <script type="module">
+    import React, { useState, useEffect, useRef } from "react";
+    import { createRoot } from "react-dom/client";
+    import {
+      Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
+      Feather, PenTool, Sliders, Undo, Trash2, ZoomIn, Upload, FileText,
+      X, Download, MousePointer2, Maximize2, Minimize2, Edit3, Scissors,
+      Check, GripVertical, Merge, Magnet, Cpu, Zap, ChevronDown, Layers,
+      Sparkles, Snail
+    } from "lucide-react";
 
-      function zhangSuenThinning(grid, w, h) {
-        let tempGrid = new Uint8Array(grid);
-        let markers = [];
-        let changed = true;
-        const p = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : tempGrid[y * w + x]);
+    // --- 核心算法 ---
 
-        while (changed) {
-          changed = false;
-          markers = [];
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-              if (tempGrid[y * w + x] === 0) continue;
-              const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
-              const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
-              const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
-              const A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + (p4 == 0 && p5 == 1) +
-                        (p5 == 0 && p6 == 1) + (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
-                        (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
-              const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
-              const m1 = p2 * p4 * p6;
-              const m2 = p4 * p6 * p8;
-              if (A === 1 && B >= 2 && B <= 6 && m1 === 0 && m2 === 0) markers.push(y * w + x);
+    function zhangSuenThinning(grid, w, h) {
+      let tempGrid = new Uint8Array(grid);
+      let markers = [];
+      let changed = true;
+      const p = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : tempGrid[y * w + x]);
+
+      while (changed) {
+        changed = false;
+        markers = [];
+        // 第一步
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (tempGrid[y * w + x] === 0) continue;
+            const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
+            const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
+            const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
+
+            const A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + (p4 == 0 && p5 == 1) +
+              (p5 == 0 && p6 == 1) + (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
+              (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
+            const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+            const m1 = p2 * p4 * p6;
+            const m2 = p4 * p6 * p8;
+
+            if (A === 1 && B >= 2 && B <= 6 && m1 === 0 && m2 === 0) {
+              markers.push(y * w + x);
             }
           }
-          if (markers.length > 0) {
-            for (let i of markers) tempGrid[i] = 0;
-            changed = true;
-          }
-          markers = [];
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-              if (tempGrid[y * w + x] === 0) continue;
-              const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
-              const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
-              const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
-              const A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + (p4 == 0 && p5 == 1) +
-                        (p5 == 0 && p6 == 1) + (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
-                        (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
-              const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
-              const m1 = p2 * p4 * p8;
-              const m2 = p2 * p6 * p8;
-              if (A === 1 && B >= 2 && B <= 6 && m1 === 0 && m2 === 0) markers.push(y * w + x);
+        }
+        if (markers.length > 0) {
+          for (let i of markers) tempGrid[i] = 0;
+          changed = true;
+        }
+
+        // 第二步
+        markers = [];
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (tempGrid[y * w + x] === 0) continue;
+            const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
+            const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
+            const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
+
+            const A = (p2 == 0 && p3 == 1) + (p3 == 0 && p4 == 1) + (p4 == 0 && p5 == 1) +
+              (p5 == 0 && p6 == 1) + (p6 == 0 && p7 == 1) + (p7 == 0 && p8 == 1) +
+              (p8 == 0 && p9 == 1) + (p9 == 0 && p2 == 1);
+            const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+            const m1 = p2 * p4 * p8;
+            const m2 = p2 * p6 * p8;
+
+            if (A === 1 && B >= 2 && B <= 6 && m1 === 0 && m2 === 0) {
+              markers.push(y * w + x);
             }
           }
-          if (markers.length > 0) {
-            for (let i of markers) tempGrid[i] = 0;
-            changed = true;
+        }
+        if (markers.length > 0) {
+          for (let i of markers) tempGrid[i] = 0;
+          changed = true;
+        }
+      }
+      return tempGrid;
+    }
+
+    function guoHallThinning(grid, w, h) {
+      let tempGrid = new Uint8Array(grid);
+      let markers = [];
+      let changed = true;
+      let iter = 0;
+      const p = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : tempGrid[y * w + x]);
+
+      while (changed) {
+        changed = false;
+        markers = [];
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (tempGrid[y * w + x] === 0) continue;
+            const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
+            const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
+            const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
+
+            const C = (!p2 & (p3 | p4)) + (!p4 & (p5 | p6)) + (!p6 & (p7 | p8)) + (!p8 & (p9 | p2));
+            const N1 = (p9 | p2) + (p3 | p4) + (p5 | p6) + (p7 | p8);
+            const N2 = (p2 | p3) + (p4 | p5) + (p6 | p7) + (p8 | p9);
+            const N = Math.min(N1, N2);
+            let m = 0;
+            if (iter % 2 === 0) m = (p6 | p7 | !p9) & p8;
+            else m = (p2 | p3 | !p5) & p4;
+
+            if (C === 1 && N >= 2 && N <= 3 && m === 0) markers.push(y * w + x);
           }
         }
-        return tempGrid;
+        if (markers.length > 0) {
+          for (let i of markers) tempGrid[i] = 0;
+          changed = true;
+        }
+        iter++;
       }
+      return tempGrid;
+    }
 
-      function guoHallThinning(grid, w, h) {
-        let tempGrid = new Uint8Array(grid);
-        let markers = [];
-        let changed = true;
-        let iter = 0;
-        const p = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : tempGrid[y * w + x]);
+    function optimizeIntersections(skeletonData, originalBinaryData, w, h) {
+      let pixels = new Int8Array(skeletonData);
+      let junctions = [];
+      const getSkel = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? pixels[y * w + x] : 0);
+      const getOrig = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? originalBinaryData[y * w + x] : 0);
 
-        while (changed) {
-          changed = false;
-          markers = [];
-          for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-              if (tempGrid[y * w + x] === 0) continue;
-              const p2 = p(x, y - 1), p3 = p(x + 1, y - 1), p4 = p(x + 1, y);
-              const p5 = p(x + 1, y + 1), p6 = p(x, y + 1), p7 = p(x - 1, y + 1);
-              const p8 = p(x - 1, y), p9 = p(x - 1, y - 1);
-              const C = (!p2 & (p3 | p4)) + (!p4 & (p5 | p6)) + (!p6 & (p7 | p8)) + (!p8 & (p9 | p2));
-              const N1 = (p9 | p2) + (p3 | p4) + (p5 | p6) + (p7 | p8);
-              const N2 = (p2 | p3) + (p4 | p5) + (p6 | p7) + (p8 | p9);
-              const N = Math.min(N1, N2);
-              let m = 0;
-              if (iter % 2 === 0) m = (p6 | p7 | !p9) & p8;
-              else m = (p2 | p3 | !p5) & p4;
-              if (C === 1 && N >= 2 && N <= 3 && m === 0) markers.push(y * w + x);
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          if (getSkel(x, y) === 1) {
+            let nSum = 0;
+            for (let dy = -1; dy <= 1; dy++)
+              for (let dx = -1; dx <= 1; dx++)
+                if ((dx !== 0 || dy !== 0) && getSkel(x + dx, y + dy) === 1) nSum++;
+
+            if (nSum >= 3) {
+              let r = 1;
+              let safe = true;
+              while (safe && r < 50) {
+                for (let ky = -r; ky <= r; ky++) {
+                  for (let kx = -r; kx <= r; kx++) {
+                    if (kx * kx + ky * ky <= r * r) {
+                      if (getOrig(x + kx, y + ky) === 0) {
+                        safe = false;
+                        break;
+                      }
+                    }
+                  }
+                  if (!safe) break;
+                }
+                if (safe) r++;
+              }
+              junctions.push({ x, y, r: r - 1 });
             }
           }
-          if (markers.length > 0) {
-            for (let i of markers) tempGrid[i] = 0;
-            changed = true;
-          }
-          iter++;
         }
-        return tempGrid;
       }
 
-      function optimizeIntersections(skeletonData, originalBinaryData, w, h) {
-        let pixels = new Int8Array(skeletonData);
-        let junctions = [];
-        const getSkel = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? pixels[y * w + x] : 0);
-        const getOrig = (x, y) => (x >= 0 && x < w && y >= 0 && y < h ? originalBinaryData[y * w + x] : 0);
-
+      const pruneLimit = 3;
+      for (let k = 0; k < pruneLimit; k++) {
+        let toPrune = [];
         for (let y = 1; y < h - 1; y++) {
           for (let x = 1; x < w - 1; x++) {
-            if (getSkel(x, y) === 1) {
+            if (pixels[y * w + x] === 1) {
               let nSum = 0;
               for (let dy = -1; dy <= 1; dy++)
                 for (let dx = -1; dx <= 1; dx++)
-                  if ((dx !== 0 || dy !== 0) && getSkel(x + dx, y + dy) === 1) nSum++;
-              if (nSum >= 3) {
-                let r = 1;
-                let safe = true;
-                while (safe && r < 50) {
-                  for (let ky = -r; ky <= r; ky++) {
-                    for (let kx = -r; kx <= r; kx++) {
-                      if (kx * kx + ky * ky <= r * r) {
-                        if (getOrig(x + kx, y + ky) === 0) {
-                          safe = false;
-                          break;
-                        }
-                      }
-                    }
-                    if (!safe) break;
-                  }
-                  if (safe) r++;
-                }
-                junctions.push({ x, y, r: r - 1 });
-              }
+                  if ((dx !== 0 || dy !== 0) && pixels[(y + dy) * w + (x + dx)] === 1) nSum++;
+              if (nSum <= 1) toPrune.push(y * w + x);
             }
           }
         }
-        const pruneLimit = 3;
-        for (let k = 0; k < pruneLimit; k++) {
-          let toPrune = [];
-          for (let y = 1; y < h - 1; y++) {
-            for (let x = 1; x < w - 1; x++) {
-              if (pixels[y * w + x] === 1) {
-                let nSum = 0;
-                for (let dy = -1; dy <= 1; dy++)
-                  for (let dx = -1; dx <= 1; dx++)
-                    if ((dx !== 0 || dy !== 0) && pixels[(y + dy) * w + (x + dx)] === 1) nSum++;
-                if (nSum <= 1) toPrune.push(y * w + x);
-              }
-            }
-          }
-          if (toPrune.length === 0) break;
-          for (let idx of toPrune) pixels[idx] = 0;
-        }
-        return pixels;
+        if (toPrune.length === 0) break;
+        for (let idx of toPrune) pixels[idx] = 0;
+      }
+      return pixels;
+    }
+
+    // --- 辅助函数 ---
+
+    const generateSkeleton = (svgPathD, width, height, viewBoxStr, algorithm) => {
+      if (!svgPathD || !viewBoxStr) return { points: [], dataUrl: null };
+      const vbParts = viewBoxStr.split(" ").map(Number);
+      const [vbX, vbY, vbW, vbH] = vbParts;
+      const GRID_SIZE = 400;
+      const scale = Math.min(GRID_SIZE / vbW, GRID_SIZE / vbH);
+      const canvasW = Math.ceil(vbW * scale);
+      const canvasH = Math.ceil(vbH * scale);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = canvasW;
+      canvas.height = canvasH;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvasW, canvasH);
+      ctx.translate(-vbX * scale, -vbY * scale);
+      ctx.scale(scale, scale);
+      const p = new Path2D(svgPathD);
+      ctx.fillStyle = "black";
+      ctx.fill(p);
+
+      const imgData = ctx.getImageData(0, 0, canvasW, canvasH);
+      const binData = new Uint8Array(canvasW * canvasH);
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        binData[i / 4] = imgData.data[i] < 128 ? 1 : 0;
       }
 
-      // --- 辅助函数 ---
+      let thinnedData;
+      if (algorithm === "guo-hall") {
+        thinnedData = guoHallThinning(binData, canvasW, canvasH);
+      } else if (algorithm === "optimized") {
+        const zs = zhangSuenThinning(binData, canvasW, canvasH);
+        thinnedData = optimizeIntersections(zs, binData, canvasW, canvasH);
+      } else {
+        thinnedData = zhangSuenThinning(binData, canvasW, canvasH);
+      }
 
-      const generateSkeleton = (svgPathD, width, height, viewBoxStr, algorithm) => {
-        if (!svgPathD || !viewBoxStr) return { points: [], dataUrl: null };
-        const vbParts = viewBoxStr.split(" ").map(Number);
-        const [vbX, vbY, vbW, vbH] = vbParts;
-        const GRID_SIZE = 400;
-        const scale = Math.min(GRID_SIZE / vbW, GRID_SIZE / vbH);
-        const canvasW = Math.ceil(vbW * scale);
-        const canvasH = Math.ceil(vbH * scale);
+      const points = [];
+      const vizImgData = ctx.createImageData(canvasW, canvasH);
+      const vData = vizImgData.data;
 
-        const canvas = document.createElement("canvas");
-        canvas.width = canvasW;
-        canvas.height = canvasH;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, canvasW, canvasH);
-        ctx.translate(-vbX * scale, -vbY * scale);
-        ctx.scale(scale, scale);
-        const p = new Path2D(svgPathD);
-        ctx.fillStyle = "black";
-        ctx.fill(p);
-
-        const imgData = ctx.getImageData(0, 0, canvasW, canvasH);
-        const binData = new Uint8Array(canvasW * canvasH);
-        for (let i = 0; i < imgData.data.length; i += 4) {
-          binData[i / 4] = imgData.data[i] < 128 ? 1 : 0;
-        }
-
-        let thinnedData;
-        if (algorithm === "guo-hall") thinnedData = guoHallThinning(binData, canvasW, canvasH);
-        else if (algorithm === "optimized") {
-          const zs = zhangSuenThinning(binData, canvasW, canvasH);
-          thinnedData = optimizeIntersections(zs, binData, canvasW, canvasH);
-        } else thinnedData = zhangSuenThinning(binData, canvasW, canvasH);
-
-        const points = [];
-        const vizImgData = ctx.createImageData(canvasW, canvasH);
-        const vData = vizImgData.data;
-
-        for (let y = 0; y < canvasH; y++) {
-          for (let x = 0; x < canvasW; x++) {
-            const idx = y * canvasW + x;
-            if (thinnedData[idx] === 1) {
-              const svgX = x / scale + vbX;
-              const svgY = y / scale + vbY;
-              points.push([svgX, svgY]);
-              const pIdx = idx * 4;
-              vData[pIdx] = 6; vData[pIdx + 1] = 182; vData[pIdx + 2] = 212; vData[pIdx + 3] = 255;
-            }
+      for (let y = 0; y < canvasH; y++) {
+        for (let x = 0; x < canvasW; x++) {
+          const idx = y * canvasW + x;
+          if (thinnedData[idx] === 1) {
+            const svgX = x / scale + vbX;
+            const svgY = y / scale + vbY;
+            points.push([svgX, svgY]);
+            const pIdx = idx * 4;
+            vData[pIdx] = 6;
+            vData[pIdx + 1] = 182;
+            vData[pIdx + 2] = 212;
+            vData[pIdx + 3] = 255;
           }
         }
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvasW, canvasH);
-        ctx.putImageData(vizImgData, 0, 0);
-        return { points, dataUrl: canvas.toDataURL() };
-      };
+      }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvasW, canvasH);
+      ctx.putImageData(vizImgData, 0, 0);
+      return { points, dataUrl: canvas.toDataURL() };
+    };
 
-      const getDistance = (p1, p2) => Math.sqrt(Math.pow(p1[0] - p2[0], 2) + Math.pow(p1[1] - p2[1], 2));
+    const getDistance = (p1, p2) => Math.sqrt(Math.pow(p1[0] - p2[0], 2) + Math.pow(p1[1] - p2[1], 2));
 
-      const perpendicularDistance = (point, lineStart, lineEnd) => {
-        let dx = lineEnd[0] - lineStart[0];
-        let dy = lineEnd[1] - lineStart[1];
-        if (dx === 0 && dy === 0) return getDistance(point, lineStart);
-        const mag = dx * dx + dy * dy;
-        let u = ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / mag;
-        if (u > 1) u = 1; else if (u < 0) u = 0;
-        const x = lineStart[0] + u * dx;
-        const y = lineStart[1] + u * dy;
-        return getDistance(point, [x, y]);
-      };
+    const perpendicularDistance = (point, lineStart, lineEnd) => {
+      let dx = lineEnd[0] - lineStart[0];
+      let dy = lineEnd[1] - lineStart[1];
+      if (dx === 0 && dy === 0) return getDistance(point, lineStart);
+      const mag = dx * dx + dy * dy;
+      let u = ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / mag;
+      if (u > 1) u = 1;
+      else if (u < 0) u = 0;
+      const x = lineStart[0] + u * dx;
+      const y = lineStart[1] + u * dy;
+      return getDistance(point, [x, y]);
+    };
 
-      const smoothPoints = (points) => {
-        if (points.length < 3) return points;
-        const newPts = [points[0]];
-        for (let i = 1; i < points.length - 1; i++) {
-          const prev = points[i - 1];
-          const curr = points[i];
-          const next = points[i + 1];
-          const x = prev[0] * 0.25 + curr[0] * 0.5 + next[0] * 0.25;
-          const y = prev[1] * 0.25 + curr[1] * 0.5 + next[1] * 0.25;
-          newPts.push([x, y]);
+    const smoothPoints = (points) => {
+      if (points.length < 3) return points;
+      const newPts = [points[0]];
+      for (let i = 1; i < points.length - 1; i++) {
+        const prev = points[i - 1];
+        const curr = points[i];
+        const next = points[i + 1];
+        const x = prev[0] * 0.25 + curr[0] * 0.5 + next[0] * 0.25;
+        const y = prev[1] * 0.25 + curr[1] * 0.5 + next[1] * 0.25;
+        newPts.push([x, y]);
+      }
+      newPts.push(points[points.length - 1]);
+      return newPts;
+    };
+
+    const ramerDouglasPeucker = (points, epsilon) => {
+      if (points.length < 3) return points;
+      let dmax = 0;
+      let index = 0;
+      const end = points.length - 1;
+      for (let i = 1; i < end; i++) {
+        const d = perpendicularDistance(points[i], points[0], points[end]);
+        if (d > dmax) {
+          index = i;
+          dmax = d;
         }
-        newPts.push(points[points.length - 1]);
-        return newPts;
-      };
+      }
+      if (dmax > epsilon) {
+        const res1 = ramerDouglasPeucker(points.slice(0, index + 1), epsilon);
+        const res2 = ramerDouglasPeucker(points.slice(index, end + 1), epsilon);
+        return [...res1.slice(0, -1), ...res2];
+      } else {
+        return [points[0], points[end]];
+      }
+    };
 
-      const ramerDouglasPeucker = (points, epsilon) => {
-        if (points.length < 3) return points;
-        let dmax = 0;
-        let index = 0;
-        const end = points.length - 1;
-        for (let i = 1; i < end; i++) {
-          const d = perpendicularDistance(points[i], points[0], points[end]);
-          if (d > dmax) { index = i; dmax = d; }
-        }
-        if (dmax > epsilon) {
-          const res1 = ramerDouglasPeucker(points.slice(0, index + 1), epsilon);
-          const res2 = ramerDouglasPeucker(points.slice(index, end + 1), epsilon);
-          return [...res1.slice(0, -1), ...res2];
-        } else return [points[0], points[end]];
-      };
+    const getSvgPathFromStroke = (points, close = false) => {
+      const len = points.length;
+      if (len < 1) return "";
+      if (len < 2) return `M ${points[0][0]} ${points[0][1]}`;
+      const sub = (p1, p2) => [p1[0] - p2[0], p1[1] - p2[1]];
+      const add = (p1, p2) => [p1[0] + p2[0], p1[1] + p2[1]];
+      const mul = (p, s) => [p[0] * s, p[1] * s];
+      const k = 1;
+      let d = `M ${points[0][0]} ${points[0][1]}`;
+      for (let i = 0; i < len - 1; i++) {
+        const p0 = i > 0 ? points[i - 1] : points[0];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = i < len - 2 ? points[i + 2] : p2;
+        const cp1 = add(p1, mul(sub(p2, p0), k / 6));
+        const cp2 = sub(p2, mul(sub(p3, p1), k / 6));
+        d += ` C ${cp1[0].toFixed(2)} ${cp1[1].toFixed(2)}, ${cp2[0].toFixed(2)} ${cp2[1].toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+      }
+      if (close) d += " Z";
+      return d;
+    };
 
-      const getSvgPathFromStroke = (points, close = false) => {
-        const len = points.length;
-        if (len < 1) return "";
-        if (len < 2) return `M ${points[0][0]} ${points[0][1]}`;
-        const sub = (p1, p2) => [p1[0] - p2[0], p1[1] - p2[1]];
-        const add = (p1, p2) => [p1[0] + p2[0], p1[1] + p2[1]];
-        const mul = (p, s) => [p[0] * s, p[1] * s];
-        const k = 1;
-        let d = `M ${points[0][0]} ${points[0][1]}`;
-        for (let i = 0; i < len - 1; i++) {
-          const p0 = i > 0 ? points[i - 1] : points[0];
-          const p1 = points[i];
-          const p2 = points[i + 1];
-          const p3 = i < len - 2 ? points[i + 2] : p2;
-          const cp1 = add(p1, mul(sub(p2, p0), k / 6));
-          const cp2 = sub(p2, mul(sub(p3, p1), k / 6));
-          d += ` C ${cp1[0].toFixed(2)} ${cp1[1].toFixed(2)}, ${cp2[0].toFixed(2)} ${cp2[1].toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
-        }
-        if (close) d += " Z";
-        return d;
-      };
-
-      const parseSvgFile = (svgContent) => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(svgContent, "image/svg+xml");
-        const svgElement = doc.querySelector("svg");
-        let viewBox = svgElement?.getAttribute("viewBox");
-        const width = svgElement?.getAttribute("width");
-        const height = svgElement?.getAttribute("height");
-        if (!viewBox && width && height) viewBox = `0 0 ${parseFloat(width)} ${parseFloat(height)}`;
-        const pathElements = doc.querySelectorAll("path");
-        const paths = [];
-        pathElements.forEach((pathEl, index) => {
-          const d = pathEl.getAttribute("d");
-          const id = pathEl.getAttribute("id") || String(index);
-          if (d) paths.push({ id, name: `笔画 ${String.fromCharCode(65 + index)}`, color: "#000000", d });
-        });
-        return { paths, viewBox, width, height };
-      };
-
-      const splitCompoundPath = (d) => d.split(/(?=[Mm])/).filter((p) => p.trim().length > 0);
-      const generateDistinctColors = (count) => Array.from({ length: count }, (_, i) => ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"][i % 6]);
-      const calculateFocusViewBox = (d, fallbackViewBox) => {
-        const numbers = d.match(/[-+]?[0-9]*\.?[0-9]+/g)?.map(Number);
-        if (!numbers || numbers.length === 0) return fallbackViewBox || "";
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (let i = 0; i < numbers.length; i += 2) {
-          if (i + 1 >= numbers.length) break;
-          const x = numbers[i], y = numbers[i + 1];
-          if (x < minX) minX = x; if (x > maxX) maxX = x;
-          if (y < minY) minY = y; if (y > maxY) maxY = y;
-        }
-        const w = maxX - minX;
-        const h = maxY - minY;
-        const p = Math.max(w, h) * 0.2;
-        return `${minX - p} ${minY - p} ${w + p * 2} ${h + p * 2}`;
-      };
-
-      const ALGORITHMS = [
-        { id: "zhang-suen", name: "标准骨架 (Standard)", desc: "经典细化算法，保留细节", icon: Layers },
-        { id: "guo-hall", name: "极简骨架 (Fast)", desc: "速度较快，线条更简练", icon: Zap },
-        { id: "optimized", name: "智能优化 (Smart)", desc: "自动去噪与线条平滑", icon: Sparkles },
-      ];
-
-      // --- 组件 ---
-
-      const AnimatedPath = React.memo(({ d, color, status, isPaused, totalDurationPerPath, id, isHovered, onHover, onLeave, recordedStrokeData }) => {
-        const [segments, setSegments] = useState([]);
-        const displayColor = isHovered ? "#ef4444" : color;
-        const isVisible = status === "completed" || status === "idle" || isHovered;
-        const isAnimating = status === "animating";
-
-        useEffect(() => {
-          if (!recordedStrokeData) {
-            setSegments([]);
-            return;
-          }
-
-          const raw = recordedStrokeData.rawStrokes && recordedStrokeData.rawStrokes.length > 0
-             ? recordedStrokeData.rawStrokes 
-             : [{ d: recordedStrokeData.d, width: recordedStrokeData.width }];
-          
-          const measured = raw.map(s => {
-            const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            el.setAttribute("d", s.d);
-            return { d: s.d, width: s.width || 8, len: el.getTotalLength() };
-          });
-
-          const totalLen = measured.reduce((sum, s) => sum + s.len, 0);
-          
-          let accumulatedDelay = 0;
-          const finalSegments = measured.map(s => {
-            const duration = totalLen > 0 ? (s.len / totalLen) * totalDurationPerPath : 0;
-            const delay = accumulatedDelay;
-            accumulatedDelay += duration;
-            return { ...s, duration, delay };
-          });
-          
-          setSegments(finalSegments);
-        }, [recordedStrokeData, totalDurationPerPath]);
-
-        const maskId = `mask-${id}`;
-
-        if (recordedStrokeData && segments.length > 0) {
-          return React.createElement("g", null,
-            React.createElement("defs", null,
-              React.createElement("mask", { id: maskId, maskUnits: "userSpaceOnUse" },
-                segments.map((seg, i) => 
-                  React.createElement("path", {
-                    key: i,
-                    d: seg.d,
-                    stroke: "white",
-                    strokeWidth: seg.width, 
-                    strokeLinecap: "round",
-                    strokeLinejoin: "round",
-                    fill: "none",
-                    strokeDasharray: seg.len,
-                    strokeDashoffset: isAnimating ? seg.len : (isVisible ? 0 : seg.len),
-                    style: isAnimating ? {
-                      animation: `dash ${seg.duration}ms linear forwards`,
-                      animationDelay: `${seg.delay}ms`,
-                      animationPlayState: isPaused ? "paused" : "running"
-                    } : {}
-                  })
-                )
-              )
-            ),
-            React.createElement("path", { 
-              d: d, 
-              fill: displayColor, 
-              mask: `url(#${maskId})`, 
-              onMouseEnter: () => onHover(id), 
-              onMouseLeave: onLeave, 
-              style: { 
-                cursor: "pointer", 
-                opacity: status === "waiting" && !isHovered ? 0 : 1, 
-                transition: "fill 0.2s, opacity 0.3s" 
-              } 
-            }),
-            isHovered && !isAnimating && segments.map((seg, i) => 
-              React.createElement("path", { key: i, d: seg.d, stroke: "red", strokeWidth: 1, fill: "none", opacity: "0.3" })
-            )
-          );
-        }
-
-        return React.createElement("path", {
-          d: d, fill: displayColor, onMouseEnter: () => onHover(id), onMouseLeave: onLeave,
-          style: { opacity: isVisible ? 1 : 0, animation: status === "animating" ? `fadeIn ${totalDurationPerPath}ms ease-out forwards` : "none", animationPlayState: isPaused ? "paused" : "running", transition: "fill 0.2s, opacity 0.3s" },
-        });
+    const parseSvgFile = (svgContent) => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgContent, "image/svg+xml");
+      const svgElement = doc.querySelector("svg");
+      let viewBox = svgElement?.getAttribute("viewBox");
+      const width = svgElement?.getAttribute("width");
+      const height = svgElement?.getAttribute("height");
+      if (!viewBox && width && height) viewBox = `0 0 ${parseFloat(width)} ${parseFloat(height)}`;
+      const pathElements = doc.querySelectorAll("path");
+      const paths = [];
+      pathElements.forEach((pathEl, index) => {
+        const d = pathEl.getAttribute("d");
+        const id = pathEl.getAttribute("id") || String(index);
+        if (d) paths.push({ id, name: `笔画 ${String.fromCharCode(65 + index)}`, color: "#000000", d });
       });
+      return { paths, viewBox, width, height };
+    };
 
-      function App() {
-        const [paths, setPaths] = useState([]);
-        const [recordedStrokes, setRecordedStrokes] = useState({});
-        const [isPlaying, setIsPlaying] = useState(false);
-        const [currentStep, setCurrentStep] = useState(-1);
-        const [hoveredId, setHoveredId] = useState(null);
-        const [svgInfo, setSvgInfo] = useState({ viewBox: null, width: null, height: null });
-        const [uploadedFileName, setUploadedFileName] = useState("");
-        const [recordingId, setRecordingId] = useState(null);
-        const [recordingViewBox, setRecordingViewBox] = useState(null);
-        const [brushSize, setBrushSize] = useState(8);
-        const [draftStrokes, setDraftStrokes] = useState([]);
-        const [activeStrokePoints, setActiveStrokePoints] = useState([]);
-        const [isDrawing, setIsDrawing] = useState(false);
-        const [draggingInfo, setDraggingInfo] = useState(null);
-        const [isFullScreen, setIsFullScreen] = useState(false);
-        const [selectedAlgorithm, setSelectedAlgorithm] = useState("zhang-suen");
-        const [showAlgoMenu, setShowAlgoMenu] = useState(false);
-        const [skeletonPoints, setSkeletonPoints] = useState([]);
-        const [skeletonImg, setSkeletonImg] = useState(null);
-        const [useMagnet, setUseMagnet] = useState(true);
-        const [isProcessingSkeleton, setIsProcessingSkeleton] = useState(false);
-        const [splittingId, setSplittingId] = useState(null);
-        const [splitDraft, setSplitDraft] = useState([]);
-        const [selectedSplitIds, setSelectedSplitIds] = useState([]);
-        const [speed, setSpeed] = useState(1.0);
-        const [editorMode, setEditorMode] = useState("draw");
-        const [selectedStrokeIndex, setSelectedStrokeIndex] = useState(null);
+    const splitCompoundPath = (d) => d.split(/(?=[Mm])/).filter((p) => p.trim().length > 0);
+    const generateDistinctColors = (count) => Array.from({ length: count }, (_, i) => ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899"][i % 6]);
+    const calculateFocusViewBox = (d, fallbackViewBox) => {
+      const numbers = d.match(/[-+]?[0-9]*\.?[0-9]+/g)?.map(Number);
+      if (!numbers || numbers.length === 0) return fallbackViewBox || "";
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (let i = 0; i < numbers.length; i += 2) {
+        if (i + 1 >= numbers.length) break;
+        const x = numbers[i], y = numbers[i + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      const w = maxX - minX;
+      const h = maxY - minY;
+      const p = Math.max(w, h) * 0.2;
+      return `${minX - p} ${minY - p} ${w + p * 2} ${h + p * 2}`;
+    };
 
-        const handlePathHover = React.useCallback((id) => setHoveredId(id), []);
-        const handlePathLeave = React.useCallback(() => setHoveredId(null), []);
+    const ALGORITHMS = [
+      { id: "zhang-suen", name: "标准骨架 (Standard)", desc: "经典细化算法，保留细节", icon: Layers },
+      { id: "guo-hall", name: "极简骨架 (Fast)", desc: "速度较快，线条更简练", icon: Zap },
+      { id: "optimized", name: "智能优化 (Smart)", desc: "自动去噪与线条平滑", icon: Sparkles },
+    ];
 
-        const fileInputRef = useRef(null);
-        const svgRef = useRef(null);
-        const BASE_DURATION = 1000;
+    // --- 组件 ---
 
-        useEffect(() => {
-          if (!isPlaying || paths.length === 0) return;
-          if (currentStep === -1) { setCurrentStep(0); return; }
-          
-          if (currentStep === paths.length) { 
-            setIsPlaying(false); 
-            return; 
-          }
+    const AnimatedPath = React.memo(({ d, color, status, isPaused, totalDurationPerPath, id, isHovered, onHover, onLeave, recordedStrokeData }) => {
+      const [segments, setSegments] = useState([]);
+      const displayColor = isHovered ? "#ef4444" : color;
+      const isVisible = status === "completed" || status === "idle" || isHovered;
+      const isAnimating = status === "animating";
 
-          const timer = setTimeout(() => {
-            setCurrentStep((prev) => {
-              const next = prev + 1;
-              return next > paths.length ? paths.length : next;
-            });
-          }, (BASE_DURATION / speed) + 200);
-          return () => clearTimeout(timer);
-        }, [isPlaying, currentStep, paths.length, speed]);
+      useEffect(() => {
+        if (!recordedStrokeData) {
+          setSegments([]);
+          return;
+        }
 
-        useEffect(() => {
-          let timer;
-          let canceled = false;
-          if (!recordingId) { setSkeletonPoints([]); setSkeletonImg(null); setIsProcessingSkeleton(false); return; }
-          const targetPath = paths.find((p) => p.id === recordingId);
-          if (targetPath) {
-            setIsProcessingSkeleton(true);
-            timer = setTimeout(() => {
-              if (canceled) return;
-              const { points, dataUrl } = generateSkeleton(targetPath.d, svgInfo.width, svgInfo.height, recordingViewBox || svgInfo.viewBox, selectedAlgorithm);
-              if (canceled) return;
-              setSkeletonPoints(points);
-              setSkeletonImg(dataUrl);
-              setIsProcessingSkeleton(false);
-            }, 50);
-          } else { setIsProcessingSkeleton(false); }
-          return () => { canceled = true; if (timer) clearTimeout(timer); };
-        }, [recordingId, selectedAlgorithm, paths, svgInfo, recordingViewBox]);
+        const raw = recordedStrokeData.rawStrokes && recordedStrokeData.rawStrokes.length > 0
+          ? recordedStrokeData.rawStrokes
+          : [{ d: recordedStrokeData.d, width: recordedStrokeData.width }];
 
-        const handlePlayPause = () => {
-          if (paths.length === 0) return;
-          if (currentStep >= paths.length && !isPlaying) setCurrentStep(0);
-          else if (currentStep === -1) setCurrentStep(0);
-          setIsPlaying(!isPlaying);
-        };
-        const handleReset = () => { setIsPlaying(false); setCurrentStep(-1); };
-        const handleFileUpload = (event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const content = e.target?.result;
-            if (typeof content === "string") {
-              if (file.name.endsWith(".json")) {
-                try {
-                  const d = JSON.parse(content);
-                  if (d.type === "trace-restore-project") { setPaths(d.paths); setRecordedStrokes(d.recordedStrokes || {}); setSvgInfo(d.svgInfo); setUploadedFileName(file.name.replace(".json", "")); handleReset(); }
-                } catch (err) {}
-              } else {
-                const { paths: p, viewBox, width, height } = parseSvgFile(content);
-                if (p.length > 0) { setPaths(p); setSvgInfo({ viewBox, width, height }); setUploadedFileName(file.name); setRecordedStrokes({}); handleReset(); }
-              }
-            }
-          };
-          reader.readAsText(file);
-          event.target.value = "";
-        };
-        const handleExport = () => {
-          const blob = new Blob([JSON.stringify({ type: "trace-restore-project", timestamp: new Date().toISOString(), svgInfo, paths, recordedStrokes }, null, 2)], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a"); a.href = url; a.download = `${uploadedFileName || "trace"}_saved.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-        };
-        const startRecording = (id) => {
-          setRecordingId(id); setIsDrawing(false); setDraggingInfo(null);
-          setEditorMode("draw"); setSelectedStrokeIndex(null);
-          const targetPath = paths.find((p) => p.id === id);
-          let computedBox = null;
-          if (targetPath) { computedBox = calculateFocusViewBox(targetPath.d, svgInfo.viewBox); setRecordingViewBox(computedBox); }
-          const prev = recordedStrokes[id];
-          if (prev) { setBrushSize(prev.width); setDraftStrokes(prev.rawStrokes || []); }
-          else {
-            let autoSize = 8;
-            if (computedBox) { const parts = computedBox.split(" "); if (parts.length === 4) autoSize = Math.max(2, Math.round(parseFloat(parts[2]) / 30)); }
-            setBrushSize(autoSize); setDraftStrokes([]);
-          }
-          setIsPlaying(false);
-        };
-        const cancelRecording = () => { setRecordingId(null); setDraftStrokes([]); setActiveStrokePoints([]); setIsDrawing(false); setDraggingInfo(null); setIsFullScreen(false); setSkeletonPoints([]); setSkeletonImg(null); setSelectedStrokeIndex(null); };
-        const saveRecording = () => {
-          const fullPath = draftStrokes.map((s) => s.d).join(" ");
-          if (!fullPath.trim()) return;
-          setRecordedStrokes((prev) => ({ ...prev, [recordingId]: { d: fullPath, width: brushSize, rawStrokes: draftStrokes } }));
-          cancelRecording();
-        };
-        const getRelativeCoordinates = (e) => {
-          const svg = svgRef.current; const pt = svg.createSVGPoint();
-          pt.x = e.clientX || e.touches?.[0]?.clientX; pt.y = e.clientY || e.touches?.[0]?.clientY;
-          const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
-          return [Number(svgP.x.toFixed(2)), Number(svgP.y.toFixed(2))];
-        };
+        const measured = raw.map(s => {
+          const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          el.setAttribute("d", s.d);
+          return { d: s.d, width: s.width || 8, len: el.getTotalLength() };
+        });
 
-        const snapToSkeleton = (pt, lastPt) => {
-          if (!useMagnet || skeletonPoints.length === 0) return pt;
-          const viewBoxWidth = parseFloat(recordingViewBox.split(" ")[2]);
-          const threshold = viewBoxWidth * 0.05;
-          const thresholdSq = threshold * threshold;
-          let minDistSq = Infinity;
-          let nearestPt = null;
-          
-          for (let sp of skeletonPoints) {
-            const dx = pt[0] - sp[0];
-            const dy = pt[1] - sp[1];
-            const distSq = dx * dx + dy * dy;
-            if (distSq < minDistSq) { minDistSq = distSq; nearestPt = sp; }
-          }
+        const totalLen = measured.reduce((sum, s) => sum + s.len, 0);
 
-          if (!nearestPt || minDistSq > thresholdSq) return pt;
+        let accumulatedDelay = 0;
+        const finalSegments = measured.map(s => {
+          const duration = totalLen > 0 ? (s.len / totalLen) * totalDurationPerPath : 0;
+          const delay = accumulatedDelay;
+          accumulatedDelay += duration;
+          return { ...s, duration, delay };
+        });
 
-          if (lastPt) {
-            const jumpDist = getDistance(nearestPt, lastPt);
-            const mouseDist = getDistance(pt, lastPt);
-            
-            if (jumpDist < 0.1 && mouseDist > Math.max(3, brushSize / 2)) return pt;
+        setSegments(finalSegments);
+      }, [recordedStrokeData, totalDurationPerPath]);
 
-            if (jumpDist > threshold * 1.2 && jumpDist > mouseDist * 3) {
-              return pt;
-            }
-          }
-          
-          return nearestPt;
-        };
+      const maskId = `mask-${id}`;
 
-        const handlePointerDown = (e) => {
-          if (!recordingId || !svgRef.current) return;
-          let pt = getRelativeCoordinates(e);
-
-          if (editorMode === "select") {
-            const hitRadius = parseFloat(recordingViewBox.split(" ")[2]) / 40 || 5;
-            let foundHit = null;
-            
-            for (let i = draftStrokes.length - 1; i >= 0; i--) {
-              for (let j = 0; j < draftStrokes[i].points.length; j++) {
-                if (getDistance(pt, draftStrokes[i].points[j]) < hitRadius) { foundHit = { strokeIndex: i, pointIndex: j }; break; }
-              }
-              if (foundHit) break;
-            }
-
-            if (foundHit) { 
-              setDraggingInfo(foundHit); 
-              e.target.setPointerCapture(e.pointerId); 
-              setSelectedStrokeIndex(foundHit.strokeIndex);
-              setBrushSize(draftStrokes[foundHit.strokeIndex].width || brushSize);
-            } else {
-              let foundStroke = null;
-              const clickThreshold = hitRadius; 
-              
-              for (let i = draftStrokes.length - 1; i >= 0; i--) {
-                 const pts = draftStrokes[i].points;
-                 if (pts.length < 2) continue;
-                 for(let j=0; j<pts.length-1; j++) {
-                   const d = perpendicularDistance(pt, pts[j], pts[j+1]);
-                   const strokeW = draftStrokes[i].width || 8;
-                   if (d < clickThreshold + strokeW/2) {
-                     foundStroke = i;
-                     break;
-                   }
-                 }
-                 if(foundStroke !== null) break;
-              }
-
-              if (foundStroke !== null) {
-                setSelectedStrokeIndex(foundStroke);
-                setBrushSize(draftStrokes[foundStroke].width || brushSize);
-              } else {
-                setSelectedStrokeIndex(null);
-              }
-            }
-          } else {
-             setSelectedStrokeIndex(null);
-             setDraggingInfo(null);
-             setIsDrawing(true);
-             pt = snapToSkeleton(pt, null);
-             setActiveStrokePoints([pt]);
-             e.target.setPointerCapture(e.pointerId);
-          }
-        };
-
-        const handlePointerMove = (e) => {
-          if (!recordingId || !svgRef.current) return;
-          let pt = getRelativeCoordinates(e);
-          if (draggingInfo) {
-            setDraftStrokes((prev) => {
-              const newStrokes = [...prev]; const stroke = { ...newStrokes[draggingInfo.strokeIndex] };
-              const newPoints = [...stroke.points]; newPoints[draggingInfo.pointIndex] = pt;
-              stroke.points = newPoints; stroke.d = getSvgPathFromStroke(newPoints);
-              newStrokes[draggingInfo.strokeIndex] = stroke; return newStrokes;
-            });
-          } else if (isDrawing) {
-            const lastPt = activeStrokePoints.length > 0 ? activeStrokePoints[activeStrokePoints.length - 1] : null;
-            pt = snapToSkeleton(pt, lastPt);
-            setActiveStrokePoints((prev) => {
-              if (prev.length > 0) {
-                const last = prev[prev.length - 1];
-                if (Math.sqrt(Math.pow(pt[0] - last[0], 2) + Math.pow(pt[1] - last[1], 2)) < 2) return prev;
-              }
-              return [...prev, pt];
-            });
-          }
-        };
-
-        const handlePointerUp = (e) => {
-          if (!recordingId) return;
-          if (e.target.releasePointerCapture && e.target.hasPointerCapture?.(e.pointerId)) {
-            e.target.releasePointerCapture(e.pointerId);
-          }
-          if (draggingInfo) setDraggingInfo(null);
-          else if (isDrawing) {
-            setIsDrawing(false);
-            if (activeStrokePoints.length > 1) {
-              let processedPoints = smoothPoints(activeStrokePoints);
-              processedPoints = smoothPoints(processedPoints);
-              
-              const simplePoints = ramerDouglasPeucker(processedPoints, 1.0);
-              
-              setDraftStrokes((prev) => [...prev, { 
-                points: simplePoints, 
-                d: getSvgPathFromStroke(simplePoints), 
-                width: brushSize 
-              }]);
-            }
-            setActiveStrokePoints([]);
-          }
-        };
-        const handleStrokeDoubleClick = (idx, e) => {
-           if (editorMode !== "select") return;
-           
-           e.stopPropagation(); e.preventDefault(); const pt = getRelativeCoordinates(e);
-           setDraftStrokes(prev => {
-             const n = [...prev]; const s = { ...n[idx] }; const pts = s.points;
-             let m = { d: Infinity, i: 0 };
-             for(let i=0; i<pts.length-1; i++) {
-               const d = perpendicularDistance(pt, pts[i], pts[i+1]);
-               if(d < m.d) m = { d, i: i+1 };
-             }
-             if(m.d < Infinity) { s.points.splice(m.i, 0, pt); s.d = getSvgPathFromStroke(s.points); n[idx] = s; }
-             return n;
-           });
-        };
-        const startSplitting = (pid) => { const p = paths.find(x => x.id === pid); if(!p) return; const subs = splitCompoundPath(p.d); if(subs.length <= 1) return; setSplittingId(pid); setSplitDraft(subs.map((d, i) => ({ id: `${pid}_split_${Date.now()}_${i}`, d, splitColor: generateDistinctColors(subs.length)[i] }))); setSelectedSplitIds([]); };
-        const mergeSelectedSplits = () => {
-          if(selectedSplitIds.length < 2) return;
-          const idxs = splitDraft.map((item, i) => selectedSplitIds.includes(item.id) ? i : -1).filter(i => i !== -1).sort((a,b)=>a-b);
-          const mergedD = idxs.map(i => splitDraft[i].d).join(" ");
-          const newItem = { id: `${splittingId}_merged_${Date.now()}`, d: mergedD, splitColor: splitDraft[idxs[0]].splitColor };
-          const n = [...splitDraft]; for(let i=idxs.length-1; i>=0; i--) n.splice(idxs[i], 1); n.splice(idxs[0], 0, newItem);
-          setSplitDraft(n); setSelectedSplitIds([]);
-        };
-        const confirmSplit = () => {
-          const oid = paths.findIndex(p => p.id === splittingId); if(oid === -1) return;
-          const op = paths[oid];
-          const news = splitDraft.map((item, i) => ({ id: `${op.id}_part_${i+1}`, name: `${op.name}.${i+1}`, color: op.color, d: item.d }));
-          const nPaths = [...paths]; nPaths.splice(oid, 1, ...news);
-          const nRec = { ...recordedStrokes }; delete nRec[splittingId];
-          setPaths(nPaths); setRecordedStrokes(nRec); setSplittingId(null); setSplitDraft([]); setSelectedSplitIds([]);
-        };
-
-        const h = React.createElement;
-        const controlPointSize = recordingViewBox ? parseFloat(recordingViewBox.split(" ")[2]) / 120 : 1;
-        const currentAlgoObj = ALGORITHMS.find(a => a.id === selectedAlgorithm) || ALGORITHMS[0];
-
-        return h("div", { className: "flex flex-col items-center justify-center h-screen bg-stone-100 p-4 font-sans text-stone-800 select-none overflow-hidden" },
-          h("style", null, `@keyframes dash { to { stroke-dashoffset: 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`),
-          showAlgoMenu && h("div", { className: "fixed inset-0 z-40", onClick: () => setShowAlgoMenu(false) }),
-          splittingId && h("div", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm" },
-            h("div", { className: "bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden" },
-              h("div", { className: "p-4 border-b border-stone-200 flex justify-between items-center bg-stone-50" },
-                h("div", { className: "flex items-center gap-4" },
-                  h("h3", { className: "text-lg font-bold flex items-center gap-2 text-stone-700" }, h(Scissors, { size: 20 }), "拆分与排序"),
-                  h("button", { onClick: mergeSelectedSplits, disabled: selectedSplitIds.length < 2, className: `px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1 transition-all ${selectedSplitIds.length >= 2 ? "bg-amber-100 text-amber-700 hover:bg-amber-200" : "bg-stone-100 text-stone-300 cursor-not-allowed"}` }, h(Merge, { size: 14 }), `合并选中 (${selectedSplitIds.length})`)
-                ),
-                h("div", { className: "flex gap-2" }, h("button", { onClick: () => setSplittingId(null), className: "px-4 py-2 text-stone-500 hover:bg-stone-200 rounded-lg font-medium" }, "取消"), h("button", { onClick: confirmSplit, className: "px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-bold flex items-center gap-2" }, h(Check, { size: 18 }), "确认拆分"))
-              ),
-              h("div", { className: "flex-1 flex overflow-hidden" },
-                h("div", { className: "w-1/3 border-r border-stone-200 bg-stone-50 overflow-y-auto p-4 flex flex-col gap-3" },
-                  splitDraft.map((item, idx) => h("div", { key: item.id, className: `bg-white p-3 rounded-xl border-2 shadow-sm flex items-center justify-between transition-colors ${selectedSplitIds.includes(item.id) ? "bg-indigo-50 border-indigo-300" : ""}`, style: { borderColor: selectedSplitIds.includes(item.id) ? undefined : item.splitColor } },
-                    h("div", { className: "flex items-center gap-3" }, h("input", { type: "checkbox", checked: selectedSplitIds.includes(item.id), onChange: () => setSelectedSplitIds(prev => prev.includes(item.id) ? prev.filter(pid => pid !== item.id) : [...prev, item.id]), className: "w-4 h-4 rounded border-stone-300 text-indigo-600 cursor-pointer" }), h("div", { className: "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white", style: { backgroundColor: item.splitColor } }, idx + 1), h("span", { className: "font-medium text-sm text-stone-700" }, `片段 ${idx + 1}`)),
-                    h("div", { className: "flex flex-col gap-1" }, h("button", { onClick: () => { const n = [...splitDraft]; [n[idx], n[idx-1]] = [n[idx-1], n[idx]]; setSplitDraft(n); }, disabled: idx === 0, className: "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20" }, h(ArrowUp, { size: 14 })), h("button", { onClick: () => { const n = [...splitDraft]; [n[idx], n[idx+1]] = [n[idx+1], n[idx]]; setSplitDraft(n); }, disabled: idx === splitDraft.length - 1, className: "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20" }, h(ArrowDown, { size: 14 })))
-                  ))
-                ),
-                h("div", { className: "w-2/3 bg-stone-100 flex items-center justify-center p-8 relative" },
-                  h("svg", { viewBox: calculateFocusViewBox(splitDraft.map(s => s.d).join(" "), svgInfo.viewBox), className: "w-full h-full max-h-[500px] overflow-visible drop-shadow-xl" }, splitDraft.map(item => h("path", { key: item.id, d: item.d, fill: item.splitColor, stroke: "white", strokeWidth: 0.5, className: `transition-all duration-300 ${selectedSplitIds.includes(item.id) ? "opacity-100 stroke-indigo-500 stroke-2" : "opacity-90"}` })))
-                )
+      if (recordedStrokeData && segments.length > 0) {
+        return React.createElement("g", null,
+          React.createElement("defs", null,
+            React.createElement("mask", { id: maskId, maskUnits: "userSpaceOnUse" },
+              segments.map((seg, i) =>
+                React.createElement("path", {
+                  key: i,
+                  d: seg.d,
+                  stroke: "white",
+                  strokeWidth: seg.width,
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round",
+                  fill: "none",
+                  strokeDasharray: seg.len,
+                  strokeDashoffset: isAnimating ? seg.len : (isVisible ? 0 : seg.len),
+                  style: isAnimating ? {
+                    animation: `dash ${seg.duration}ms linear forwards`,
+                    animationDelay: `${seg.delay}ms`,
+                    animationPlayState: isPaused ? "paused" : "running"
+                  } : {}
+                })
               )
             )
           ),
-          recordingId && h("div", { className: `fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 ${isFullScreen ? "bg-white" : "bg-black/80"}` },
-            h("div", { className: `bg-white flex flex-col transition-all duration-300 ${isFullScreen ? "w-full h-full rounded-none p-4" : "w-[35vw] h-[55vh] p-6 rounded-2xl shadow-2xl"}` },
-              h("div", { className: "flex justify-between items-center mb-4 shrink-0" },
-                h("h3", { className: "text-xl font-bold flex items-center gap-2" }, h(ZoomIn, { className: "text-indigo-500" }), `编辑: ${paths.find(p => p.id === recordingId)?.name}`),
-                h("div", { className: "space-x-2 flex items-center" },
-                  h("button", { onClick: () => setIsFullScreen(!isFullScreen), className: "p-2 text-slate-500 hover:bg-slate-100 rounded" }, isFullScreen ? h(Minimize2, { size: 20 }) : h(Maximize2, { size: 20 })),
-                  h("div", { className: "w-px h-6 bg-slate-200 mx-1" }),
-                  
-                  h("div", { className: "flex items-center bg-slate-100 rounded-lg p-1 mr-1" },
-                    h("button", { 
-                      onClick: () => { setEditorMode("draw"); setSelectedStrokeIndex(null); }, 
-                      className: `p-1.5 rounded-md transition-all ${editorMode === "draw" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`,
-                      title: "绘画模式"
-                    }, h(PenTool, { size: 18 })),
-                    h("button", { 
-                      onClick: () => { setEditorMode("select"); }, 
-                      className: `p-1.5 rounded-md transition-all ${editorMode === "select" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`,
-                      title: "选择模式 (点击笔画调整粗细)"
-                    }, h(MousePointer2, { size: 18 }))
-                  ),
-
-                  h("div", { className: "w-px h-6 bg-slate-200 mx-1" }),
-                  h("button", { onClick: () => setDraftStrokes(prev => prev.slice(0, -1)), disabled: draftStrokes.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30" }, h(Undo, { size: 18 })),
-                  h("button", { onClick: () => setDraftStrokes([]), disabled: draftStrokes.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30" }, h(Trash2, { size: 18 })),
-                  h("button", { onClick: cancelRecording, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded" }, "取消"),
-                  h("button", { onClick: saveRecording, className: "px-4 py-1 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold" }, "保存")
-                )
-              ),
-              h("div", { className: "mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex flex-wrap gap-4 shrink-0 text-xs items-center relative z-20" },
-                h("div", { className: "flex items-center gap-3 border-r border-indigo-200 pr-4 relative" },
-                  h("div", { className: "relative" },
-                    h("button", { onClick: () => setShowAlgoMenu(!showAlgoMenu), className: "flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-indigo-700 hover:bg-indigo-50 transition-all shadow-sm active:scale-95" }, h(currentAlgoObj.icon, { size: 14 }), h("span", { className: "font-medium" }, currentAlgoObj.name.split(" ")[0]), h(ChevronDown, { size: 14, className: `transition-transform duration-200 ${showAlgoMenu ? "rotate-180" : ""}` })),
-                    showAlgoMenu && h("div", { className: "absolute top-full left-0 mt-2 w-56 bg-white border border-indigo-100 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200" }, ALGORITHMS.map(opt => h("button", { key: opt.id, onClick: () => { setSelectedAlgorithm(opt.id); setShowAlgoMenu(false); }, className: `w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${selectedAlgorithm === opt.id ? "bg-indigo-50" : "hover:bg-slate-50"}` }, h("div", { className: `mt-0.5 ${selectedAlgorithm === opt.id ? "text-indigo-600" : "text-slate-400"}` }, h(opt.icon, { size: 16 })), h("div", { className: "flex flex-col" }, h("span", { className: `text-sm font-bold ${selectedAlgorithm === opt.id ? "text-indigo-700" : "text-slate-700"}` }, opt.name), h("span", { className: "text-[10px] text-slate-400 mt-0.5" }, opt.desc)), selectedAlgorithm === opt.id && h(Check, { size: 14, className: "ml-auto text-indigo-600 mt-1" }))))
-                  ),
-                  h("button", { onClick: () => setUseMagnet(!useMagnet), className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all border text-xs font-medium ${useMagnet ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-slate-500 border-indigo-200 hover:bg-indigo-50"}` }, h(Magnet, { size: 14 }), useMagnet ? "磁吸开启" : "磁吸关闭")
-                ),
-                h("div", { className: "flex items-center gap-2 flex-1 min-w-[150px]" },
-                  h("label", { className: `font-bold uppercase flex items-center gap-1 shrink-0 text-[10px] ${editorMode === "select" ? "text-amber-600" : "text-slate-400"}` }, h(Sliders, { size: 12 }), editorMode === "select" ? (selectedStrokeIndex !== null ? "调整粗细" : "选择笔画") : "绘画模式"),
-                  h("input", { 
-                    type: "range", min: "1", max: "30", step: "0.5", 
-                    disabled: editorMode === "draw" || (editorMode === "select" && selectedStrokeIndex === null),
-                    value: selectedStrokeIndex !== null ? (draftStrokes[selectedStrokeIndex].width || 8) : brushSize, 
-                    onChange: (e) => {
-                      const v = parseFloat(e.target.value);
-                      if (selectedStrokeIndex !== null) {
-                         setDraftStrokes(prev => {
-                           const n = [...prev];
-                           n[selectedStrokeIndex] = { ...n[selectedStrokeIndex], width: v };
-                           return n;
-                         });
-                         setBrushSize(v);
-                      } else {
-                         setBrushSize(v);
-                      }
-                    }, 
-                    className: `w-full h-1.5 rounded-lg appearance-none ${(editorMode === "draw" || (editorMode === "select" && selectedStrokeIndex === null)) ? "bg-stone-200 cursor-not-allowed" : "bg-amber-100 accent-amber-500 cursor-pointer"}` 
-                  }),
-                  h("span", { className: `font-mono bg-white px-2 py-0.5 rounded border text-center font-bold ${editorMode === "draw" ? "text-stone-300 border-stone-200" : (selectedStrokeIndex !== null ? "border-amber-200 text-amber-600" : "border-indigo-100 text-indigo-600")}` }, selectedStrokeIndex !== null ? (draftStrokes[selectedStrokeIndex].width || 8) : brushSize)
-                )
-              ),
-              h("div", { className: "border-2 border-dashed border-indigo-200 rounded-xl bg-white flex justify-center p-0 relative overflow-hidden cursor-crosshair flex-1 min-h-0" },
-                isProcessingSkeleton && h("div", { className: "absolute inset-0 bg-white/50 z-20 flex items-center justify-center font-bold text-indigo-600" }, "正在计算骨架..."),
-                h("svg", {
-                    ref: svgRef, viewBox: recordingViewBox, width: "100%", height: "100%", preserveAspectRatio: "xMidYMid meet", className: "overflow-visible touch-none", style: { background: "#f8fafc", cursor: editorMode === "select" ? "default" : "crosshair" },
-                    onPointerDown: handlePointerDown, onPointerMove: handlePointerMove, onPointerUp: handlePointerUp, onPointerLeave: handlePointerUp,
-                  },
-                  h("path", { d: paths.find(p => p.id === recordingId)?.d, fill: "#e5e7eb" }),
-                  (useMagnet && skeletonImg) && h("image", { href: skeletonImg, x: (recordingViewBox || svgInfo.viewBox).split(" ")[0], y: (recordingViewBox || svgInfo.viewBox).split(" ")[1], width: (recordingViewBox || svgInfo.viewBox).split(" ")[2], height: (recordingViewBox || svgInfo.viewBox).split(" ")[3], style: { opacity: 0.8, pointerEvents: "none" }, preserveAspectRatio: "none" }),
-                  draftStrokes.map((strokeObj, i) => {
-                    const isSelected = i === selectedStrokeIndex;
-                    return h("g", { key: i },
-                      h("path", { d: strokeObj.d, fill: "none", stroke: "transparent", strokeWidth: Math.max((strokeObj.width || brushSize) * 2, 20), className: editorMode === "select" ? "cursor-pointer" : "cursor-copy", onDoubleClick: (e) => handleStrokeDoubleClick(i, e) }),
-                      h("path", { 
-                        d: strokeObj.d, 
-                        fill: "none", 
-                        stroke: isSelected ? "#f59e0b" : "rgba(79, 70, 229, 0.8)", 
-                        strokeWidth: strokeObj.width || brushSize, 
-                        strokeLinecap: "round", 
-                        strokeLinejoin: "round", 
-                        className: "pointer-events-none transition-colors duration-200" 
-                      }),
-                      !isDrawing && editorMode === "select" && strokeObj.points.map((pt, ptIdx) => h("circle", { key: ptIdx, cx: pt[0], cy: pt[1], r: controlPointSize, fill: isSelected ? "#f59e0b" : "#3b82f6", stroke: "white", strokeWidth: controlPointSize / 3, className: "hover:fill-red-500 cursor-move transition-colors", onDoubleClick: (e) => { e.stopPropagation(); e.preventDefault(); const newStrokes = [...draftStrokes]; newStrokes[i].points.splice(ptIdx, 1); newStrokes[i].d = getSvgPathFromStroke(newStrokes[i].points); setDraftStrokes(newStrokes); } }))
-                  )})
-                  ,
-                  isDrawing && h("path", { d: activeStrokePoints.length > 0 ? `M ${activeStrokePoints[0][0]} ${activeStrokePoints[0][1]}` + activeStrokePoints.slice(1).map(p => ` L ${p[0]} ${p[1]}`).join("") : "", fill: "none", stroke: "rgba(239, 68, 68, 0.6)", strokeWidth: brushSize, strokeLinecap: "round", strokeLinejoin: "round" })
-                )
-              )
-            )
-          ),
-          h("div", { className: "w-full max-w-[1600px] h-[75vh] grid grid-cols-1 lg:grid-cols-3 gap-6" },
-            h("div", { className: "lg:col-span-1 bg-white rounded-2xl shadow-xl p-6 border border-stone-200 flex flex-col h-full overflow-hidden" },
-              h("div", { className: "flex items-center justify-between mb-6 shrink-0" }, h("h2", { className: "text-2xl font-serif font-bold text-stone-800 flex items-center gap-2" }, h(Feather, { className: "w-6 h-6 text-stone-600" }), "真迹还原系统")),
-              h("div", { className: "mb-6 shrink-0" },
-                h("input", { ref: fileInputRef, type: "file", accept: ".svg,.txt,.json", onChange: handleFileUpload, className: "hidden" }),
-                paths.length === 0
-                  ? h("div", { onClick: () => fileInputRef.current?.click(), className: "border-2 border-dashed border-indigo-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/50 transition-all group" }, h(Upload, { className: "w-12 h-12 mx-auto mb-3 text-indigo-400 group-hover:text-indigo-600 transition-colors" }), h("p", { className: "text-stone-600 font-medium" }, "点击上传文件"), h("p", { className: "text-stone-400 text-sm mt-1" }, "支持 .svg 图像 或 .json 项目文件"))
-                  : h("div", { className: "flex flex-col gap-2" },
-                      h("div", { className: "bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between" },
-                        h("div", { className: "flex items-center gap-3" }, h("div", { className: "w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center" }, h(FileText, { className: "w-5 h-5 text-green-600" })), h("div", null, h("p", { className: "text-sm font-medium text-green-800" }, uploadedFileName), h("p", { className: "text-xs text-green-600" }, `已加载 ${paths.length} 个笔画`))),
-                        h("div", { className: "flex gap-2" }, h("button", { onClick: () => fileInputRef.current?.click(), className: "px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors" }, "更换"), h("button", { onClick: () => { setPaths([]); setSvgInfo({}); setUploadedFileName(""); setRecordedStrokes({}); handleReset(); }, className: "p-1.5 text-green-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" }, h(X, { size: 18 })))
-                      ),
-                      Object.keys(recordedStrokes).length > 0 && h("button", { onClick: handleExport, className: "w-full flex items-center justify-center gap-2 py-2 bg-stone-100 text-stone-600 border border-stone-200 rounded-xl hover:bg-stone-200 transition-colors text-sm font-bold" }, h(Download, { size: 16 }), "保存当前进度 (.json)")
-                    )
-              ),
-              h("div", { className: "flex-1 overflow-y-auto px-2" },
-                paths.length > 0 && h(React.Fragment, null,
-                  h("div", { className: "flex justify-between items-end mb-2" }, h("h3", { className: "text-xs font-bold text-stone-500 uppercase tracking-wider" }, "字形列表 & 录制"), h("span", { className: "text-xs text-stone-400" }, `已录制: ${Object.keys(recordedStrokes).length} / ${paths.length}`)),
-                  h("div", { className: "space-y-3 mb-8" }, paths.map((path, index) => {
-                    const hasRecording = !!recordedStrokes[path.id];
-                    const isCurrent = index === currentStep;
-                    const canSplit = splitCompoundPath(path.d).length > 1;
-                    return h("div", { key: path.id, className: `flex items-center justify-between p-3 rounded-xl border transition-all ${isCurrent ? "border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-500" : hoveredId === path.id ? "border-stone-400 bg-stone-100" : "border-stone-100 bg-white hover:border-stone-300"}`, onMouseEnter: () => setHoveredId(path.id), onMouseLeave: () => setHoveredId(null) },
-                      h("div", { className: "flex items-center space-x-3" }, h("div", { className: `w-8 h-8 rounded-full flex items-center justify-center font-serif font-bold text-sm text-white ${isCurrent ? "bg-indigo-600" : hasRecording ? "bg-green-500" : "bg-stone-300"}` }, hasRecording ? "✓" : String.fromCharCode(65 + index)), h("div", { className: "flex flex-col" }, h("span", { className: "font-medium text-stone-700 font-serif" }, path.name), h("span", { className: "text-[10px] text-stone-400" }, hasRecording ? "已就绪" : "等待录制..."))),
-                      h("div", { className: "flex items-center space-x-1" },
-                        canSplit && h("button", { onClick: () => startSplitting(path.id), className: "p-1.5 rounded text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 mr-1", title: "拆分复合笔画" }, h(Scissors, { size: 14 })),
-                        h("button", { onClick: () => startRecording(path.id), className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors ${hasRecording ? "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"}` }, hasRecording ? h(Edit3, { size: 12 }) : h(PenTool, { size: 12 }), hasRecording ? "编辑" : "录制"),
-                        h("div", { className: "w-px h-6 bg-stone-200 mx-1" }),
-                        h("button", { onClick: () => { const n = [...paths]; [n[index], n[index-1]] = [n[index-1], n[index]]; setPaths(n); }, disabled: index === 0 || isPlaying, className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500" }, h(ArrowUp, { size: 14 })),
-                        h("button", { onClick: () => { const n = [...paths]; [n[index], n[index+1]] = [n[index+1], n[index]]; setPaths(n); }, disabled: index === paths.length - 1 || isPlaying, className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500" }, h(ArrowDown, { size: 14 }))
-                      )
-                    );
-                  }))
-                )
-              ),
-              h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0 relative" },
-                h("div", { className: "bg-white border border-stone-100 rounded-2xl shadow-xl shadow-stone-200/50 p-4 flex items-center justify-between relative overflow-visible" },
-                  h("div", { className: "flex items-center gap-3 w-1/3 z-10" },
-                    h("div", { className: `flex items-center gap-1.5 bg-stone-50 rounded-full px-2 py-1.5 border border-stone-100 transition-all ${paths.length === 0 ? "opacity-50 cursor-not-allowed" : "hover:border-stone-300 group"}` },
-                      h(Snail, { size: 12, className: "text-stone-400 group-hover:text-stone-600 transition-colors" }),
-                      h("input", { type: "range", min: "0.5", max: "5", step: "0.5", disabled: paths.length === 0, value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: `w-14 h-1 bg-stone-200 rounded-lg appearance-none ${paths.length === 0 ? "cursor-not-allowed" : "cursor-pointer accent-amber-500"}` }),
-                      h(Zap, { size: 12, className: "text-amber-500 fill-amber-500" })
-                    ),
-                    h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-full transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 16 }))
-                  ),
-                  h("div", { className: "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 z-20" },
-                    h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipBack, { size: 20 })),
-                    h("button", { onClick: handlePlayPause, disabled: paths.length === 0, className: `w-14 h-14 flex items-center justify-center rounded-full text-white shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 ${paths.length === 0 ? "bg-stone-200 shadow-none cursor-not-allowed" : isPlaying ? "bg-amber-500" : "bg-indigo-600"}` }, isPlaying ? h(Pause, { size: 24, fill: "currentColor" }) : h(Play, { size: 24, fill: "currentColor", className: "ml-1" })),
-                    h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipForward, { size: 20 }))
-                  ),
-                  h("div", { className: "flex justify-end w-1/3 z-10" },
-                    h("div", { className: "px-3 py-1.5 bg-stone-50 rounded-lg border border-stone-100 text-xs font-mono font-medium text-stone-500 min-w-[70px] text-center" }, paths.length > 0 ? (currentStep >= paths.length ? "完成" : `${Math.max(0, currentStep + 1)} / ${paths.length}`) : "--")
-                  )
-                )
-              )
-            ),
-            h("div", { className: "lg:col-span-2 bg-[#f5f5f4] rounded-2xl shadow-inner flex flex-col items-center justify-center p-8 relative overflow-hidden border border-stone-300 h-full" },
-              h("div", { className: "absolute inset-0 opacity-40 pointer-events-none mix-blend-multiply", style: { backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E")` } }),
-              paths.length === 0
-                ? h("div", { className: "relative z-10 text-center text-stone-400" }, h(Upload, { className: "w-16 h-16 mx-auto mb-4 opacity-30" }), h("p", { className: "text-lg font-medium" }, "等待加载字形"), h("p", { className: "text-sm mt-2" }, "上传 SVG 文件后将在此处显示预览"))
-                : h("div", { className: "relative z-10 p-4 w-full h-full flex items-center justify-center" },
-                    h("svg", { width: "100%", height: "100%", viewBox: svgInfo.viewBox, preserveAspectRatio: "xMidYMid meet", className: "overflow-visible", style: { maxWidth: "100%", maxHeight: "100%" } },
-                      h("g", null, paths.map((path, index) => {
-                        let status = "waiting"; if (currentStep === -1) status = "idle"; else if (index < currentStep) status = "completed"; else if (index === currentStep) status = "animating";
-                        return h(AnimatedPath, { key: path.id, ...path, status, isPaused: !isPlaying, recordedStrokeData: recordedStrokes[path.id], totalDurationPerPath: BASE_DURATION / speed, isHovered: hoveredId === path.id, onHover: handlePathHover, onLeave: handlePathLeave });
-                      }))
-                    )
-                  )
-            )
+          React.createElement("path", {
+            d: d,
+            fill: displayColor,
+            mask: `url(#${maskId})`,
+            onMouseEnter: () => onHover(id),
+            onMouseLeave: onLeave,
+            style: {
+              cursor: "pointer",
+              opacity: status === "waiting" && !isHovered ? 0 : 1,
+              transition: "fill 0.2s, opacity 0.3s"
+            }
+          }),
+          isHovered && !isAnimating && segments.map((seg, i) =>
+            React.createElement("path", { key: i, d: seg.d, stroke: "red", strokeWidth: 1, fill: "none", opacity: "0.3" })
           )
         );
       }
-      const root = createRoot(document.getElementById("root"));
-      root.render(React.createElement(App));
-    </script>
-  </body>
+
+      return React.createElement("path", {
+        d: d,
+        fill: displayColor,
+        onMouseEnter: () => onHover(id),
+        onMouseLeave: onLeave,
+        style: {
+          opacity: isVisible ? 1 : 0,
+          animation: status === "animating" ? `fadeIn ${totalDurationPerPath}ms ease-out forwards` : "none",
+          animationPlayState: isPaused ? "paused" : "running",
+          transition: "fill 0.2s, opacity 0.3s"
+        },
+      });
+    });
+
+    function App() {
+      const [paths, setPaths] = useState([]);
+      const [recordedStrokes, setRecordedStrokes] = useState({});
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [currentStep, setCurrentStep] = useState(-1);
+      const [hoveredId, setHoveredId] = useState(null);
+      const [svgInfo, setSvgInfo] = useState({ viewBox: null, width: null, height: null });
+      const [uploadedFileName, setUploadedFileName] = useState("");
+      const [recordingId, setRecordingId] = useState(null);
+      const [recordingViewBox, setRecordingViewBox] = useState(null);
+      const [brushSize, setBrushSize] = useState(8);
+      const [draftStrokes, setDraftStrokes] = useState([]);
+      const [activeStrokePoints, setActiveStrokePoints] = useState([]);
+      const [isDrawing, setIsDrawing] = useState(false);
+      const [draggingInfo, setDraggingInfo] = useState(null);
+      const [isFullScreen, setIsFullScreen] = useState(false);
+      const [selectedAlgorithm, setSelectedAlgorithm] = useState("zhang-suen");
+      const [showAlgoMenu, setShowAlgoMenu] = useState(false);
+      const [skeletonPoints, setSkeletonPoints] = useState([]);
+      const [skeletonImg, setSkeletonImg] = useState(null);
+      const [useMagnet, setUseMagnet] = useState(true);
+      const [isProcessingSkeleton, setIsProcessingSkeleton] = useState(false);
+      const [splittingId, setSplittingId] = useState(null);
+      const [splitDraft, setSplitDraft] = useState([]);
+      const [selectedSplitIds, setSelectedSplitIds] = useState([]);
+      const [speed, setSpeed] = useState(1.0);
+      const [editorMode, setEditorMode] = useState("draw");
+      const [selectedStrokeIndex, setSelectedStrokeIndex] = useState(null);
+
+      const handlePathHover = React.useCallback((id) => setHoveredId(id), []);
+      const handlePathLeave = React.useCallback(() => setHoveredId(null), []);
+
+      const fileInputRef = useRef(null);
+      const svgRef = useRef(null);
+      const BASE_DURATION = 1000;
+
+      useEffect(() => {
+        if (!isPlaying || paths.length === 0) return;
+        if (currentStep === -1) {
+          setCurrentStep(0);
+          return;
+        }
+
+        if (currentStep === paths.length) {
+          setIsPlaying(false);
+          return;
+        }
+
+        const timer = setTimeout(() => {
+          setCurrentStep((prev) => {
+            const next = prev + 1;
+            return next > paths.length ? paths.length : next;
+          });
+        }, (BASE_DURATION / speed) + 200);
+        return () => clearTimeout(timer);
+      }, [isPlaying, currentStep, paths.length, speed]);
+
+      useEffect(() => {
+        let timer;
+        let canceled = false;
+        if (!recordingId) {
+          setSkeletonPoints([]);
+          setSkeletonImg(null);
+          setIsProcessingSkeleton(false);
+          return;
+        }
+        const targetPath = paths.find((p) => p.id === recordingId);
+        if (targetPath) {
+          setIsProcessingSkeleton(true);
+          timer = setTimeout(() => {
+            if (canceled) return;
+            const { points, dataUrl } = generateSkeleton(targetPath.d, svgInfo.width, svgInfo.height, recordingViewBox || svgInfo.viewBox, selectedAlgorithm);
+            if (canceled) return;
+            setSkeletonPoints(points);
+            setSkeletonImg(dataUrl);
+            setIsProcessingSkeleton(false);
+          }, 50);
+        } else {
+          setIsProcessingSkeleton(false);
+        }
+        return () => {
+          canceled = true;
+          if (timer) clearTimeout(timer);
+        };
+      }, [recordingId, selectedAlgorithm, paths, svgInfo, recordingViewBox]);
+
+      const handlePlayPause = () => {
+        if (paths.length === 0) return;
+        if (currentStep >= paths.length && !isPlaying) setCurrentStep(0);
+        else if (currentStep === -1) setCurrentStep(0);
+        setIsPlaying(!isPlaying);
+      };
+      
+      const handleReset = () => {
+        setIsPlaying(false);
+        setCurrentStep(-1);
+      };
+
+      const handleFileUpload = (event) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target?.result;
+          if (typeof content === "string") {
+            if (file.name.endsWith(".json")) {
+              try {
+                const d = JSON.parse(content);
+                if (d.type === "trace-restore-project") {
+                  setPaths(d.paths);
+                  setRecordedStrokes(d.recordedStrokes || {});
+                  setSvgInfo(d.svgInfo);
+                  setUploadedFileName(file.name.replace(".json", ""));
+                  handleReset();
+                }
+              } catch (err) {}
+            } else {
+              const { paths: p, viewBox, width, height } = parseSvgFile(content);
+              if (p.length > 0) {
+                setPaths(p);
+                setSvgInfo({ viewBox, width, height });
+                setUploadedFileName(file.name);
+                setRecordedStrokes({});
+                handleReset();
+              }
+            }
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = "";
+      };
+
+      const handleExport = () => {
+        const blob = new Blob([JSON.stringify({
+          type: "trace-restore-project",
+          timestamp: new Date().toISOString(),
+          svgInfo,
+          paths,
+          recordedStrokes
+        }, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${uploadedFileName || "trace"}_saved.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      const startRecording = (id) => {
+        setRecordingId(id);
+        setIsDrawing(false);
+        setDraggingInfo(null);
+        setEditorMode("draw");
+        setSelectedStrokeIndex(null);
+        const targetPath = paths.find((p) => p.id === id);
+        let computedBox = null;
+        if (targetPath) {
+          computedBox = calculateFocusViewBox(targetPath.d, svgInfo.viewBox);
+          setRecordingViewBox(computedBox);
+        }
+        const prev = recordedStrokes[id];
+        if (prev) {
+          setBrushSize(prev.width);
+          setDraftStrokes(prev.rawStrokes || []);
+        } else {
+          let autoSize = 8;
+          if (computedBox) {
+            const parts = computedBox.split(" ");
+            if (parts.length === 4) autoSize = Math.max(2, Math.round(parseFloat(parts[2]) / 30));
+          }
+          setBrushSize(autoSize);
+          setDraftStrokes([]);
+        }
+        setIsPlaying(false);
+      };
+
+      const cancelRecording = () => {
+        setRecordingId(null);
+        setDraftStrokes([]);
+        setActiveStrokePoints([]);
+        setIsDrawing(false);
+        setDraggingInfo(null);
+        setIsFullScreen(false);
+        setSkeletonPoints([]);
+        setSkeletonImg(null);
+        setSelectedStrokeIndex(null);
+      };
+
+      const saveRecording = () => {
+        const fullPath = draftStrokes.map((s) => s.d).join(" ");
+        if (!fullPath.trim()) return;
+        setRecordedStrokes((prev) => ({ ...prev,
+          [recordingId]: { d: fullPath, width: brushSize, rawStrokes: draftStrokes }
+        }));
+        cancelRecording();
+      };
+
+      const getRelativeCoordinates = (e) => {
+        const svg = svgRef.current;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX || e.touches?.[0]?.clientX;
+        pt.y = e.clientY || e.touches?.[0]?.clientY;
+        const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+        return [Number(svgP.x.toFixed(2)), Number(svgP.y.toFixed(2))];
+      };
+
+      const snapToSkeleton = (pt, lastPt) => {
+        if (!useMagnet || skeletonPoints.length === 0) return pt;
+        const viewBoxWidth = parseFloat(recordingViewBox.split(" ")[2]);
+        const threshold = viewBoxWidth * 0.05;
+        const thresholdSq = threshold * threshold;
+        let minDistSq = Infinity;
+        let nearestPt = null;
+
+        for (let sp of skeletonPoints) {
+          const dx = pt[0] - sp[0];
+          const dy = pt[1] - sp[1];
+          const distSq = dx * dx + dy * dy;
+          if (distSq < minDistSq) {
+            minDistSq = distSq;
+            nearestPt = sp;
+          }
+        }
+
+        if (!nearestPt || minDistSq > thresholdSq) return pt;
+
+        if (lastPt) {
+          const jumpDist = getDistance(nearestPt, lastPt);
+          const mouseDist = getDistance(pt, lastPt);
+
+          if (jumpDist < 0.1 && mouseDist > Math.max(3, brushSize / 2)) return pt;
+
+          if (jumpDist > threshold * 1.2 && jumpDist > mouseDist * 3) {
+            return pt;
+          }
+        }
+
+        return nearestPt;
+      };
+
+      const handlePointerDown = (e) => {
+        if (!recordingId || !svgRef.current) return;
+        let pt = getRelativeCoordinates(e);
+
+        if (editorMode === "select") {
+          const hitRadius = parseFloat(recordingViewBox.split(" ")[2]) / 40 || 5;
+          let foundHit = null;
+
+          for (let i = draftStrokes.length - 1; i >= 0; i--) {
+            for (let j = 0; j < draftStrokes[i].points.length; j++) {
+              if (getDistance(pt, draftStrokes[i].points[j]) < hitRadius) {
+                foundHit = { strokeIndex: i, pointIndex: j };
+                break;
+              }
+            }
+            if (foundHit) break;
+          }
+
+          if (foundHit) {
+            setDraggingInfo(foundHit);
+            e.target.setPointerCapture(e.pointerId);
+            setSelectedStrokeIndex(foundHit.strokeIndex);
+            setBrushSize(draftStrokes[foundHit.strokeIndex].width || brushSize);
+          } else {
+            let foundStroke = null;
+            const clickThreshold = hitRadius;
+
+            for (let i = draftStrokes.length - 1; i >= 0; i--) {
+              const pts = draftStrokes[i].points;
+              if (pts.length < 2) continue;
+              for (let j = 0; j < pts.length - 1; j++) {
+                const d = perpendicularDistance(pt, pts[j], pts[j + 1]);
+                const strokeW = draftStrokes[i].width || 8;
+                if (d < clickThreshold + strokeW / 2) {
+                  foundStroke = i;
+                  break;
+                }
+              }
+              if (foundStroke !== null) break;
+            }
+
+            if (foundStroke !== null) {
+              setSelectedStrokeIndex(foundStroke);
+              setBrushSize(draftStrokes[foundStroke].width || brushSize);
+            } else {
+              setSelectedStrokeIndex(null);
+            }
+          }
+        } else {
+          setSelectedStrokeIndex(null);
+          setDraggingInfo(null);
+          setIsDrawing(true);
+          pt = snapToSkeleton(pt, null);
+          setActiveStrokePoints([pt]);
+          e.target.setPointerCapture(e.pointerId);
+        }
+      };
+
+      const handlePointerMove = (e) => {
+        if (!recordingId || !svgRef.current) return;
+        let pt = getRelativeCoordinates(e);
+        if (draggingInfo) {
+          setDraftStrokes((prev) => {
+            const newStrokes = [...prev];
+            const stroke = { ...newStrokes[draggingInfo.strokeIndex] };
+            const newPoints = [...stroke.points];
+            newPoints[draggingInfo.pointIndex] = pt;
+            stroke.points = newPoints;
+            stroke.d = getSvgPathFromStroke(newPoints);
+            newStrokes[draggingInfo.strokeIndex] = stroke;
+            return newStrokes;
+          });
+        } else if (isDrawing) {
+          const lastPt = activeStrokePoints.length > 0 ? activeStrokePoints[activeStrokePoints.length - 1] : null;
+          pt = snapToSkeleton(pt, lastPt);
+          setActiveStrokePoints((prev) => {
+            if (prev.length > 0) {
+              const last = prev[prev.length - 1];
+              if (Math.sqrt(Math.pow(pt[0] - last[0], 2) + Math.pow(pt[1] - last[1], 2)) < 2) return prev;
+            }
+            return [...prev, pt];
+          });
+        }
+      };
+
+      const handlePointerUp = (e) => {
+        if (!recordingId) return;
+        if (e.target.releasePointerCapture && e.target.hasPointerCapture?.(e.pointerId)) {
+          e.target.releasePointerCapture(e.pointerId);
+        }
+        if (draggingInfo) setDraggingInfo(null);
+        else if (isDrawing) {
+          setIsDrawing(false);
+          if (activeStrokePoints.length > 1) {
+            let processedPoints = smoothPoints(activeStrokePoints);
+            processedPoints = smoothPoints(processedPoints);
+
+            const simplePoints = ramerDouglasPeucker(processedPoints, 1.0);
+
+            setDraftStrokes((prev) => [...prev, {
+              points: simplePoints,
+              d: getSvgPathFromStroke(simplePoints),
+              width: brushSize
+            }]);
+          }
+          setActiveStrokePoints([]);
+        }
+      };
+
+      const handleStrokeDoubleClick = (idx, e) => {
+        if (editorMode !== "select") return;
+
+        e.stopPropagation();
+        e.preventDefault();
+        const pt = getRelativeCoordinates(e);
+        setDraftStrokes(prev => {
+          const n = [...prev];
+          const s = { ...n[idx] };
+          const pts = s.points;
+          let m = { d: Infinity, i: 0 };
+          for (let i = 0; i < pts.length - 1; i++) {
+            const d = perpendicularDistance(pt, pts[i], pts[i + 1]);
+            if (d < m.d) m = { d, i: i + 1 };
+          }
+          if (m.d < Infinity) {
+            s.points.splice(m.i, 0, pt);
+            s.d = getSvgPathFromStroke(s.points);
+            n[idx] = s;
+          }
+          return n;
+        });
+      };
+
+      const startSplitting = (pid) => {
+        const p = paths.find(x => x.id === pid);
+        if (!p) return;
+        const subs = splitCompoundPath(p.d);
+        if (subs.length <= 1) return;
+        setSplittingId(pid);
+        setSplitDraft(subs.map((d, i) => ({
+          id: `${pid}_split_${Date.now()}_${i}`,
+          d,
+          splitColor: generateDistinctColors(subs.length)[i]
+        })));
+        setSelectedSplitIds([]);
+      };
+
+      const mergeSelectedSplits = () => {
+        if (selectedSplitIds.length < 2) return;
+        const idxs = splitDraft.map((item, i) => selectedSplitIds.includes(item.id) ? i : -1).filter(i => i !== -1).sort((a, b) => a - b);
+        const mergedD = idxs.map(i => splitDraft[i].d).join(" ");
+        const newItem = {
+          id: `${splittingId}_merged_${Date.now()}`,
+          d: mergedD,
+          splitColor: splitDraft[idxs[0]].splitColor
+        };
+        const n = [...splitDraft];
+        for (let i = idxs.length - 1; i >= 0; i--) n.splice(idxs[i], 1);
+        n.splice(idxs[0], 0, newItem);
+        setSplitDraft(n);
+        setSelectedSplitIds([]);
+      };
+
+      const confirmSplit = () => {
+        const oid = paths.findIndex(p => p.id === splittingId);
+        if (oid === -1) return;
+        const op = paths[oid];
+        const news = splitDraft.map((item, i) => ({
+          id: `${op.id}_part_${i + 1}`,
+          name: `${op.name}.${i + 1}`,
+          color: op.color,
+          d: item.d
+        }));
+        const nPaths = [...paths];
+        nPaths.splice(oid, 1, ...news);
+        const nRec = { ...recordedStrokes };
+        delete nRec[splittingId];
+        setPaths(nPaths);
+        setRecordedStrokes(nRec);
+        setSplittingId(null);
+        setSplitDraft([]);
+        setSelectedSplitIds([]);
+      };
+
+      const h = React.createElement;
+      const controlPointSize = recordingViewBox ? parseFloat(recordingViewBox.split(" ")[2]) / 120 : 1;
+      const currentAlgoObj = ALGORITHMS.find(a => a.id === selectedAlgorithm) || ALGORITHMS[0];
+
+      return h("div", { className: "flex flex-col items-center justify-center h-screen bg-stone-100 p-4 font-sans text-stone-800 select-none overflow-hidden" },
+        h("style", null, `@keyframes dash { to { stroke-dashoffset: 0; } } @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`),
+        
+        // 遮罩
+        showAlgoMenu && h("div", { className: "fixed inset-0 z-40", onClick: () => setShowAlgoMenu(false) }),
+
+        // 拆分弹窗
+        splittingId && h("div", { className: "fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm" },
+          h("div", { className: "bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden" },
+            h("div", { className: "p-4 border-b border-stone-200 flex justify-between items-center bg-stone-50" },
+              h("div", { className: "flex items-center gap-4" },
+                h("h3", { className: "text-lg font-bold flex items-center gap-2 text-stone-700" }, h(Scissors, { size: 20 }), "拆分与排序"),
+                h("button", {
+                  onClick: mergeSelectedSplits,
+                  disabled: selectedSplitIds.length < 2,
+                  className: `px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1 transition-all ${selectedSplitIds.length >= 2 ? "bg-amber-100 text-amber-700 hover:bg-amber-200" : "bg-stone-100 text-stone-300 cursor-not-allowed"}`
+                }, h(Merge, { size: 14 }), `合并选中 (${selectedSplitIds.length})`)
+              ),
+              h("div", { className: "flex gap-2" },
+                h("button", { onClick: () => setSplittingId(null), className: "px-4 py-2 text-stone-500 hover:bg-stone-200 rounded-lg font-medium" }, "取消"),
+                h("button", { onClick: confirmSplit, className: "px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-bold flex items-center gap-2" }, h(Check, { size: 18 }), "确认拆分")
+              )
+            ),
+            h("div", { className: "flex-1 flex overflow-hidden" },
+              h("div", { className: "w-1/3 border-r border-stone-200 bg-stone-50 overflow-y-auto p-4 flex flex-col gap-3" },
+                splitDraft.map((item, idx) => h("div", {
+                    key: item.id,
+                    className: `bg-white p-3 rounded-xl border-2 shadow-sm flex items-center justify-between transition-colors ${selectedSplitIds.includes(item.id) ? "bg-indigo-50 border-indigo-300" : ""}`,
+                    style: { borderColor: selectedSplitIds.includes(item.id) ? undefined : item.splitColor }
+                  },
+                  h("div", { className: "flex items-center gap-3" },
+                    h("input", {
+                      type: "checkbox",
+                      checked: selectedSplitIds.includes(item.id),
+                      onChange: () => setSelectedSplitIds(prev => prev.includes(item.id) ? prev.filter(pid => pid !== item.id) : [...prev, item.id]),
+                      className: "w-4 h-4 rounded border-stone-300 text-indigo-600 cursor-pointer"
+                    }),
+                    h("div", { className: "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white", style: { backgroundColor: item.splitColor } }, idx + 1),
+                    h("span", { className: "font-medium text-sm text-stone-700" }, `片段 ${idx + 1}`)
+                  ),
+                  h("div", { className: "flex flex-col gap-1" },
+                    h("button", {
+                      onClick: () => { const n = [...splitDraft]; [n[idx], n[idx - 1]] = [n[idx - 1], n[idx]]; setSplitDraft(n); },
+                      disabled: idx === 0,
+                      className: "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20"
+                    }, h(ArrowUp, { size: 14 })),
+                    h("button", {
+                      onClick: () => { const n = [...splitDraft]; [n[idx], n[idx + 1]] = [n[idx + 1], n[idx]]; setSplitDraft(n); },
+                      disabled: idx === splitDraft.length - 1,
+                      className: "p-1 hover:bg-stone-100 rounded text-stone-500 disabled:opacity-20"
+                    }, h(ArrowDown, { size: 14 }))
+                  )
+                ))
+              ),
+              h("div", { className: "w-2/3 bg-stone-100 flex items-center justify-center p-8 relative" },
+                h("svg", {
+                  viewBox: calculateFocusViewBox(splitDraft.map(s => s.d).join(" "), svgInfo.viewBox),
+                  className: "w-full h-full max-h-[500px] overflow-visible drop-shadow-xl"
+                }, splitDraft.map(item => h("path", {
+                  key: item.id,
+                  d: item.d,
+                  fill: item.splitColor,
+                  stroke: "white",
+                  strokeWidth: 0.5,
+                  className: `transition-all duration-300 ${selectedSplitIds.includes(item.id) ? "opacity-100 stroke-indigo-500 stroke-2" : "opacity-90"}`
+                })))
+              )
+            )
+          )
+        ),
+
+        // 录制/编辑弹窗
+        recordingId && h("div", { className: `fixed inset-0 z-50 flex flex-col items-center justify-center backdrop-blur-sm transition-all duration-300 ${isFullScreen ? "bg-white" : "bg-black/80"}` },
+          h("div", { className: `bg-white flex flex-col transition-all duration-300 ${isFullScreen ? "w-full h-full rounded-none p-4" : "w-[35vw] h-[55vh] p-6 rounded-2xl shadow-2xl"}` },
+            h("div", { className: "flex justify-between items-center mb-4 shrink-0" },
+              h("h3", { className: "text-xl font-bold flex items-center gap-2" }, h(ZoomIn, { className: "text-indigo-500" }), `编辑: ${paths.find(p => p.id === recordingId)?.name}`),
+              h("div", { className: "space-x-2 flex items-center" },
+                h("button", { onClick: () => setIsFullScreen(!isFullScreen), className: "p-2 text-slate-500 hover:bg-slate-100 rounded" }, isFullScreen ? h(Minimize2, { size: 20 }) : h(Maximize2, { size: 20 })),
+                h("div", { className: "w-px h-6 bg-slate-200 mx-1" }),
+
+                h("div", { className: "flex items-center bg-slate-100 rounded-lg p-1 mr-1" },
+                  h("button", {
+                    onClick: () => { setEditorMode("draw"); setSelectedStrokeIndex(null); },
+                    className: `p-1.5 rounded-md transition-all ${editorMode === "draw" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`,
+                    title: "绘画模式"
+                  }, h(PenTool, { size: 18 })),
+                  h("button", {
+                    onClick: () => { setEditorMode("select"); },
+                    className: `p-1.5 rounded-md transition-all ${editorMode === "select" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`,
+                    title: "选择模式 (点击笔画调整粗细)"
+                  }, h(MousePointer2, { size: 18 }))
+                ),
+
+                h("div", { className: "w-px h-6 bg-slate-200 mx-1" }),
+                h("button", { onClick: () => setDraftStrokes(prev => prev.slice(0, -1)), disabled: draftStrokes.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30" }, h(Undo, { size: 18 })),
+                h("button", { onClick: () => setDraftStrokes([]), disabled: draftStrokes.length === 0, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded disabled:opacity-30" }, h(Trash2, { size: 18 })),
+                h("button", { onClick: cancelRecording, className: "px-3 py-1 text-slate-500 hover:bg-slate-100 rounded" }, "取消"),
+                h("button", { onClick: saveRecording, className: "px-4 py-1 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 font-bold" }, "保存")
+              )
+            ),
+            h("div", { className: "mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100 flex flex-wrap gap-4 shrink-0 text-xs items-center relative z-20" },
+              h("div", { className: "flex items-center gap-3 border-r border-indigo-200 pr-4 relative" },
+                h("div", { className: "relative" },
+                  h("button", { onClick: () => setShowAlgoMenu(!showAlgoMenu), className: "flex items-center gap-2 px-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-indigo-700 hover:bg-indigo-50 transition-all shadow-sm active:scale-95" },
+                    h(currentAlgoObj.icon, { size: 14 }),
+                    h("span", { className: "font-medium" }, currentAlgoObj.name.split(" ")[0]),
+                    h(ChevronDown, { size: 14, className: `transition-transform duration-200 ${showAlgoMenu ? "rotate-180" : ""}` })
+                  ),
+                  showAlgoMenu && h("div", { className: "absolute top-full left-0 mt-2 w-56 bg-white border border-indigo-100 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-200" },
+                    ALGORITHMS.map(opt => h("button", {
+                        key: opt.id,
+                        onClick: () => { setSelectedAlgorithm(opt.id); setShowAlgoMenu(false); },
+                        className: `w-full text-left px-4 py-3 flex items-start gap-3 transition-colors ${selectedAlgorithm === opt.id ? "bg-indigo-50" : "hover:bg-slate-50"}`
+                      },
+                      h("div", { className: `mt-0.5 ${selectedAlgorithm === opt.id ? "text-indigo-600" : "text-slate-400"}` }, h(opt.icon, { size: 16 })),
+                      h("div", { className: "flex flex-col" }, h("span", { className: `text-sm font-bold ${selectedAlgorithm === opt.id ? "text-indigo-700" : "text-slate-700"}` }, opt.name), h("span", { className: "text-[10px] text-slate-400 mt-0.5" }, opt.desc)),
+                      selectedAlgorithm === opt.id && h(Check, { size: 14, className: "ml-auto text-indigo-600 mt-1" })
+                    ))
+                  )
+                ),
+                h("button", { onClick: () => setUseMagnet(!useMagnet), className: `flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all border text-xs font-medium ${useMagnet ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" : "bg-white text-slate-500 border-indigo-200 hover:bg-indigo-50"}` }, h(Magnet, { size: 14 }), useMagnet ? "磁吸开启" : "磁吸关闭")
+              ),
+              h("div", { className: "flex items-center gap-2 flex-1 min-w-[150px]" },
+                h("label", { className: `font-bold uppercase flex items-center gap-1 shrink-0 text-[10px] ${editorMode === "select" ? "text-amber-600" : "text-slate-400"}` }, h(Sliders, { size: 12 }), editorMode === "select" ? (selectedStrokeIndex !== null ? "调整粗细" : "选择笔画") : "绘画模式"),
+                h("input", {
+                  type: "range",
+                  min: "1",
+                  max: "30",
+                  step: "0.5",
+                  disabled: editorMode === "draw" || (editorMode === "select" && selectedStrokeIndex === null),
+                  value: selectedStrokeIndex !== null ? (draftStrokes[selectedStrokeIndex].width || 8) : brushSize,
+                  onChange: (e) => {
+                    const v = parseFloat(e.target.value);
+                    if (selectedStrokeIndex !== null) {
+                      setDraftStrokes(prev => {
+                        const n = [...prev];
+                        n[selectedStrokeIndex] = { ...n[selectedStrokeIndex], width: v };
+                        return n;
+                      });
+                      setBrushSize(v);
+                    } else {
+                      setBrushSize(v);
+                    }
+                  },
+                  className: `w-full h-1.5 rounded-lg appearance-none ${(editorMode === "draw" || (editorMode === "select" && selectedStrokeIndex === null)) ? "bg-stone-200 cursor-not-allowed" : "bg-amber-100 accent-amber-500 cursor-pointer"}`
+                }),
+                h("span", { className: `font-mono bg-white px-2 py-0.5 rounded border text-center font-bold ${editorMode === "draw" ? "text-stone-300 border-stone-200" : (selectedStrokeIndex !== null ? "border-amber-200 text-amber-600" : "border-indigo-100 text-indigo-600")}` }, selectedStrokeIndex !== null ? (draftStrokes[selectedStrokeIndex].width || 8) : brushSize)
+              )
+            ),
+            h("div", { className: "border-2 border-dashed border-indigo-200 rounded-xl bg-white flex justify-center p-0 relative overflow-hidden cursor-crosshair flex-1 min-h-0" },
+              isProcessingSkeleton && h("div", { className: "absolute inset-0 bg-white/50 z-20 flex items-center justify-center font-bold text-indigo-600" }, "正在计算骨架..."),
+              h("svg", {
+                  ref: svgRef,
+                  viewBox: recordingViewBox,
+                  width: "100%",
+                  height: "100%",
+                  preserveAspectRatio: "xMidYMid meet",
+                  className: "overflow-visible touch-none",
+                  style: { background: "#f8fafc", cursor: editorMode === "select" ? "default" : "crosshair" },
+                  onPointerDown: handlePointerDown,
+                  onPointerMove: handlePointerMove,
+                  onPointerUp: handlePointerUp,
+                  onPointerLeave: handlePointerUp,
+                },
+                h("path", { d: paths.find(p => p.id === recordingId)?.d, fill: "#e5e7eb" }),
+                (useMagnet && skeletonImg) && h("image", {
+                  href: skeletonImg,
+                  x: (recordingViewBox || svgInfo.viewBox).split(" ")[0],
+                  y: (recordingViewBox || svgInfo.viewBox).split(" ")[1],
+                  width: (recordingViewBox || svgInfo.viewBox).split(" ")[2],
+                  height: (recordingViewBox || svgInfo.viewBox).split(" ")[3],
+                  style: { opacity: 0.8, pointerEvents: "none" },
+                  preserveAspectRatio: "none"
+                }),
+                draftStrokes.map((strokeObj, i) => {
+                  const isSelected = i === selectedStrokeIndex;
+                  return h("g", { key: i },
+                    h("path", {
+                      d: strokeObj.d,
+                      fill: "none",
+                      stroke: "transparent",
+                      strokeWidth: Math.max((strokeObj.width || brushSize) * 2, 20),
+                      className: editorMode === "select" ? "cursor-pointer" : "cursor-copy",
+                      onDoubleClick: (e) => handleStrokeDoubleClick(i, e)
+                    }),
+                    h("path", {
+                      d: strokeObj.d,
+                      fill: "none",
+                      stroke: isSelected ? "#f59e0b" : "rgba(79, 70, 229, 0.8)",
+                      strokeWidth: strokeObj.width || brushSize,
+                      strokeLinecap: "round",
+                      strokeLinejoin: "round",
+                      className: "pointer-events-none transition-colors duration-200"
+                    }),
+                    !isDrawing && editorMode === "select" && strokeObj.points.map((pt, ptIdx) => h("circle", {
+                      key: ptIdx,
+                      cx: pt[0],
+                      cy: pt[1],
+                      r: controlPointSize,
+                      fill: isSelected ? "#f59e0b" : "#3b82f6",
+                      stroke: "white",
+                      strokeWidth: controlPointSize / 3,
+                      className: "hover:fill-red-500 cursor-move transition-colors",
+                      onDoubleClick: (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const newStrokes = [...draftStrokes];
+                        newStrokes[i].points.splice(ptIdx, 1);
+                        newStrokes[i].d = getSvgPathFromStroke(newStrokes[i].points);
+                        setDraftStrokes(newStrokes);
+                      }
+                    }))
+                  )
+                }),
+                isDrawing && h("path", {
+                  d: activeStrokePoints.length > 0 ? `M ${activeStrokePoints[0][0]} ${activeStrokePoints[0][1]}` + activeStrokePoints.slice(1).map(p => ` L ${p[0]} ${p[1]}`).join("") : "",
+                  fill: "none",
+                  stroke: "rgba(239, 68, 68, 0.6)",
+                  strokeWidth: brushSize,
+                  strokeLinecap: "round",
+                  strokeLinejoin: "round"
+                })
+              )
+            )
+          )
+        ),
+
+        // 主界面布局
+        h("div", { className: "w-full max-w-[1600px] h-[75vh] grid grid-cols-1 lg:grid-cols-3 gap-6" },
+          // 左侧：控制与列表
+          h("div", { className: "lg:col-span-1 bg-white rounded-2xl shadow-xl p-6 border border-stone-200 flex flex-col h-full overflow-hidden" },
+            h("div", { className: "flex items-center justify-between mb-6 shrink-0" }, h("h2", { className: "text-2xl font-serif font-bold text-stone-800 flex items-center gap-2" }, h(Feather, { className: "w-6 h-6 text-stone-600" }), "真迹还原系统")),
+            h("div", { className: "mb-6 shrink-0" },
+              h("input", { ref: fileInputRef, type: "file", accept: ".svg,.txt,.json", onChange: handleFileUpload, className: "hidden" }),
+              paths.length === 0
+                ? h("div", { onClick: () => fileInputRef.current?.click(), className: "border-2 border-dashed border-indigo-300 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50/50 transition-all group" },
+                    h(Upload, { className: "w-12 h-12 mx-auto mb-3 text-indigo-400 group-hover:text-indigo-600 transition-colors" }),
+                    h("p", { className: "text-stone-600 font-medium" }, "点击上传文件"),
+                    h("p", { className: "text-stone-400 text-sm mt-1" }, "支持 .svg 图像 或 .json 项目文件")
+                  )
+                : h("div", { className: "flex flex-col gap-2" },
+                    h("div", { className: "bg-green-50 border border-green-200 rounded-xl p-4 flex items-center justify-between" },
+                      h("div", { className: "flex items-center gap-3" }, h("div", { className: "w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center" }, h(FileText, { className: "w-5 h-5 text-green-600" })), h("div", null, h("p", { className: "text-sm font-medium text-green-800" }, uploadedFileName), h("p", { className: "text-xs text-green-600" }, `已加载 ${paths.length} 个笔画`))),
+                      h("div", { className: "flex gap-2" }, h("button", { onClick: () => fileInputRef.current?.click(), className: "px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors" }, "更换"), h("button", { onClick: () => { setPaths([]); setSvgInfo({}); setUploadedFileName(""); setRecordedStrokes({}); handleReset(); }, className: "p-1.5 text-green-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" }, h(X, { size: 18 })))
+                    ),
+                    Object.keys(recordedStrokes).length > 0 && h("button", { onClick: handleExport, className: "w-full flex items-center justify-center gap-2 py-2 bg-stone-100 text-stone-600 border border-stone-200 rounded-xl hover:bg-stone-200 transition-colors text-sm font-bold" }, h(Download, { size: 16 }), "保存当前进度 (.json)")
+                  )
+            ),
+            h("div", { className: "flex-1 overflow-y-auto px-2" },
+              paths.length > 0 && h(React.Fragment, null,
+                h("div", { className: "flex justify-between items-end mb-2" }, h("h3", { className: "text-xs font-bold text-stone-500 uppercase tracking-wider" }, "字形列表 & 录制"), h("span", { className: "text-xs text-stone-400" }, `已录制: ${Object.keys(recordedStrokes).length} / ${paths.length}`)),
+                h("div", { className: "space-y-3 mb-8" }, paths.map((path, index) => {
+                  const hasRecording = !!recordedStrokes[path.id];
+                  const isCurrent = index === currentStep;
+                  const canSplit = splitCompoundPath(path.d).length > 1;
+                  return h("div", {
+                      key: path.id,
+                      className: `flex items-center justify-between p-3 rounded-xl border transition-all ${isCurrent ? "border-indigo-500 bg-indigo-50 shadow-md ring-1 ring-indigo-500" : hoveredId === path.id ? "border-stone-400 bg-stone-100" : "border-stone-100 bg-white hover:border-stone-300"}`,
+                      onMouseEnter: () => setHoveredId(path.id),
+                      onMouseLeave: () => setHoveredId(null)
+                    },
+                    h("div", { className: "flex items-center space-x-3" }, h("div", { className: `w-8 h-8 rounded-full flex items-center justify-center font-serif font-bold text-sm text-white ${isCurrent ? "bg-indigo-600" : hasRecording ? "bg-green-500" : "bg-stone-300"}` }, hasRecording ? "✓" : String.fromCharCode(65 + index)), h("div", { className: "flex flex-col" }, h("span", { className: "font-medium text-stone-700 font-serif" }, path.name), h("span", { className: "text-[10px] text-stone-400" }, hasRecording ? "已就绪" : "等待录制..."))),
+                    h("div", { className: "flex items-center space-x-1" },
+                      canSplit && h("button", { onClick: () => startSplitting(path.id), className: "p-1.5 rounded text-amber-500 hover:bg-amber-50 border border-transparent hover:border-amber-200 mr-1", title: "拆分复合笔画" }, h(Scissors, { size: 14 })),
+                      h("button", { onClick: () => startRecording(path.id), className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold transition-colors ${hasRecording ? "bg-white border border-stone-200 text-stone-600 hover:bg-stone-50" : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"}` }, hasRecording ? h(Edit3, { size: 12 }) : h(PenTool, { size: 12 }), hasRecording ? "编辑" : "录制"),
+                      h("div", { className: "w-px h-6 bg-stone-200 mx-1" }),
+                      h("button", { onClick: () => { const n = [...paths]; [n[index], n[index - 1]] = [n[index - 1], n[index]]; setPaths(n); }, disabled: index === 0 || isPlaying, className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500" }, h(ArrowUp, { size: 14 })),
+                      h("button", { onClick: () => { const n = [...paths]; [n[index], n[index + 1]] = [n[index + 1], n[index]]; setPaths(n); }, disabled: index === paths.length - 1 || isPlaying, className: "p-1.5 rounded hover:bg-stone-200 disabled:opacity-30 text-stone-500" }, h(ArrowDown, { size: 14 }))
+                    )
+                  );
+                }))
+              )
+            ),
+            h("div", { className: "mt-auto pt-6 border-t border-stone-200 shrink-0 relative" },
+              h("div", { className: "bg-white border border-stone-100 rounded-2xl shadow-xl shadow-stone-200/50 p-4 flex items-center justify-between relative overflow-visible" },
+                h("div", { className: "flex items-center gap-3 w-1/3 z-10" },
+                  h("div", { className: `flex items-center gap-1.5 bg-stone-50 rounded-full px-2 py-1.5 border border-stone-100 transition-all ${paths.length === 0 ? "opacity-50 cursor-not-allowed" : "hover:border-stone-300 group"}` },
+                    h(Snail, { size: 12, className: "text-stone-400 group-hover:text-stone-600 transition-colors" }),
+                    h("input", { type: "range", min: "0.5", max: "5", step: "0.5", disabled: paths.length === 0, value: speed, onChange: (e) => setSpeed(parseFloat(e.target.value)), className: `w-14 h-1 bg-stone-200 rounded-lg appearance-none ${paths.length === 0 ? "cursor-not-allowed" : "cursor-pointer accent-amber-500"}` }),
+                    h(Zap, { size: 12, className: "text-amber-500 fill-amber-500" })
+                  ),
+                  h("button", { onClick: handleReset, disabled: paths.length === 0, className: "p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-full transition-colors disabled:opacity-30", title: "重置" }, h(RotateCcw, { size: 16 }))
+                ),
+                h("div", { className: "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-4 z-20" },
+                  h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }, disabled: paths.length === 0 || currentStep <= 0, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipBack, { size: 20 })),
+                  h("button", { onClick: handlePlayPause, disabled: paths.length === 0, className: `w-14 h-14 flex items-center justify-center rounded-full text-white shadow-lg shadow-indigo-200 hover:shadow-indigo-300 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 ${paths.length === 0 ? "bg-stone-200 shadow-none cursor-not-allowed" : isPlaying ? "bg-amber-500" : "bg-indigo-600"}` }, isPlaying ? h(Pause, { size: 24, fill: "currentColor" }) : h(Play, { size: 24, fill: "currentColor", className: "ml-1" })),
+                  h("button", { onClick: () => { setIsPlaying(false); setCurrentStep(p => Math.min(paths.length, p + 1)); }, disabled: paths.length === 0 || currentStep >= paths.length, className: "p-2 text-stone-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-all disabled:opacity-20" }, h(SkipForward, { size: 20 }))
+                ),
+                h("div", { className: "flex justify-end w-1/3 z-10" },
+                  h("div", { className: "px-3 py-1.5 bg-stone-50 rounded-lg border border-stone-100 text-xs font-mono font-medium text-stone-500 min-w-[70px] text-center" }, paths.length > 0 ? (currentStep >= paths.length ? "完成" : `${Math.max(0, currentStep + 1)} / ${paths.length}`) : "--")
+                )
+              )
+            )
+          ),
+
+          // 右侧：显示区域
+          h("div", { className: "lg:col-span-2 bg-[#f5f5f4] rounded-2xl shadow-inner flex flex-col items-center justify-center p-8 relative overflow-hidden border border-stone-300 h-full" },
+            h("div", { className: "absolute inset-0 opacity-40 pointer-events-none mix-blend-multiply", style: { backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E")` } }),
+            paths.length === 0
+              ? h("div", { className: "relative z-10 text-center text-stone-400" }, h(Upload, { className: "w-16 h-16 mx-auto mb-4 opacity-30" }), h("p", { className: "text-lg font-medium" }, "等待加载字形"), h("p", { className: "text-sm mt-2" }, "上传 SVG 文件后将在此处显示预览"))
+              : h("div", { className: "relative z-10 p-4 w-full h-full flex items-center justify-center" },
+                  h("svg", { width: "100%", height: "100%", viewBox: svgInfo.viewBox, preserveAspectRatio: "xMidYMid meet", className: "overflow-visible", style: { maxWidth: "100%", maxHeight: "100%" } },
+                    h("g", null, paths.map((path, index) => {
+                      let status = "waiting";
+                      if (currentStep === -1) status = "idle";
+                      else if (index < currentStep) status = "completed";
+                      else if (index === currentStep) status = "animating";
+                      return h(AnimatedPath, {
+                        key: path.id,
+                        ...path,
+                        status,
+                        isPaused: !isPlaying,
+                        recordedStrokeData: recordedStrokes[path.id],
+                        totalDurationPerPath: BASE_DURATION / speed,
+                        isHovered: hoveredId === path.id,
+                        onHover: handlePathHover,
+                        onLeave: handlePathLeave
+                      });
+                    }))
+                  )
+                )
+          )
+        )
+      );
+    }
+    const root = createRoot(document.getElementById("root"));
+    root.render(React.createElement(App));
+  </script>
+</body>
+
 </html>
