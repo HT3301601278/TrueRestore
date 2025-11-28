@@ -21,7 +21,7 @@
     <div id="root"></div>
 
     <script type="module">
-      import React, { useState, useEffect, useRef, useMemo } from "react";
+      import React, { useState, useEffect, useRef } from "react";
       import { createRoot } from "react-dom/client";
       import {
         Play, Pause, SkipBack, SkipForward, RotateCcw, ArrowUp, ArrowDown,
@@ -336,12 +336,12 @@
         const isVisible = status === "completed" || status === "idle" || isHovered;
         const isAnimating = status === "animating";
 
-        useMemo(() => {
+        useEffect(() => {
           if (!recordedStrokeData) {
             setSegments([]);
             return;
           }
-          
+
           const raw = recordedStrokeData.rawStrokes && recordedStrokeData.rawStrokes.length > 0
              ? recordedStrokeData.rawStrokes 
              : [{ d: recordedStrokeData.d, width: recordedStrokeData.width }];
@@ -449,28 +449,33 @@
         const BASE_DURATION = 1000;
 
         useEffect(() => {
-          let timer;
-          if (isPlaying && currentStep < paths.length) {
-            if (currentStep === -1) setCurrentStep(0);
-            else timer = setTimeout(() => { setCurrentStep((prev) => (prev >= paths.length - 1 ? (setIsPlaying(false), prev) : prev + 1)); }, (BASE_DURATION / speed) + 200);
-          }
+          if (!isPlaying || paths.length === 0) return;
+          if (currentStep === -1) { setCurrentStep(0); return; }
+          if (currentStep >= paths.length - 1) { setIsPlaying(false); return; }
+          const timer = setTimeout(() => {
+            setCurrentStep((prev) => Math.min(prev + 1, paths.length - 1));
+          }, (BASE_DURATION / speed) + 200);
           return () => clearTimeout(timer);
         }, [isPlaying, currentStep, paths.length, speed]);
 
         useEffect(() => {
-          if (recordingId) {
-            const targetPath = paths.find((p) => p.id === recordingId);
-            if (targetPath) {
-              setIsProcessingSkeleton(true);
-              setTimeout(() => {
-                const { points, dataUrl } = generateSkeleton(targetPath.d, svgInfo.width, svgInfo.height, recordingViewBox || svgInfo.viewBox, selectedAlgorithm);
-                setSkeletonPoints(points);
-                setSkeletonImg(dataUrl);
-                setIsProcessingSkeleton(false);
-              }, 50);
-            }
-          } else { setSkeletonPoints([]); setSkeletonImg(null); }
-        }, [recordingId, selectedAlgorithm, paths, svgInfo]);
+          let timer;
+          let canceled = false;
+          if (!recordingId) { setSkeletonPoints([]); setSkeletonImg(null); setIsProcessingSkeleton(false); return; }
+          const targetPath = paths.find((p) => p.id === recordingId);
+          if (targetPath) {
+            setIsProcessingSkeleton(true);
+            timer = setTimeout(() => {
+              if (canceled) return;
+              const { points, dataUrl } = generateSkeleton(targetPath.d, svgInfo.width, svgInfo.height, recordingViewBox || svgInfo.viewBox, selectedAlgorithm);
+              if (canceled) return;
+              setSkeletonPoints(points);
+              setSkeletonImg(dataUrl);
+              setIsProcessingSkeleton(false);
+            }, 50);
+          } else { setIsProcessingSkeleton(false); }
+          return () => { canceled = true; if (timer) clearTimeout(timer); };
+        }, [recordingId, selectedAlgorithm, paths, svgInfo, recordingViewBox]);
 
         const handlePlayPause = () => {
           if (paths.length === 0) return;
@@ -538,18 +543,21 @@
           if (!useMagnet || skeletonPoints.length === 0) return pt;
           const viewBoxWidth = parseFloat(recordingViewBox.split(" ")[2]);
           const threshold = viewBoxWidth * 0.03;
-          let minDist = Infinity;
+          const thresholdSq = threshold * threshold;
+          let minDistSq = Infinity;
           let nearestPt = null;
           for (let sp of skeletonPoints) {
-            const d = getDistance(pt, sp);
-            if (d < minDist) { minDist = d; nearestPt = sp; }
+            const dx = pt[0] - sp[0];
+            const dy = pt[1] - sp[1];
+            const distSq = dx * dx + dy * dy;
+            if (distSq < minDistSq) { minDistSq = distSq; nearestPt = sp; }
           }
           if (nearestPt && lastPt) {
             const stuckDist = getDistance(nearestPt, lastPt);
             const mouseMoveDist = getDistance(pt, lastPt);
             if (stuckDist < 0.5 && mouseMoveDist > Math.max(5, brushSize / 2)) return pt;
           }
-          return nearestPt && minDist < threshold ? nearestPt : pt;
+          return nearestPt && minDistSq < thresholdSq ? nearestPt : pt;
         };
 
         const handlePointerDown = (e) => {
@@ -632,7 +640,9 @@
 
         const handlePointerUp = (e) => {
           if (!recordingId) return;
-          e.target.releasePointerCapture(e.pointerId);
+          if (e.target.releasePointerCapture && e.target.hasPointerCapture?.(e.pointerId)) {
+            e.target.releasePointerCapture(e.pointerId);
+          }
           if (draggingInfo) setDraggingInfo(null);
           else if (isDrawing) {
             setIsDrawing(false);

@@ -31,7 +31,7 @@ const AnimatedPath = ({ d, color, index, currentStep, direction, recordedStrokeD
   const isWaiting = index > currentStep;
   const isCurrent = index === currentStep;
   
-  useMemo(() => {
+  useEffect(() => {
     if (!recordedStrokeData) {
       setSegments([]);
       return;
@@ -130,12 +130,16 @@ const SignaturePlayer = ({ jsonUrl, options = {} }) => {
 
   useEffect(() => {
     if (!jsonUrl) return;
-    fetch(jsonUrl).then((r) => r.json()).then((json) => {
+    const controller = new AbortController();
+    let startTimer;
+    fetch(jsonUrl, { signal: controller.signal }).then((r) => r.json()).then((json) => {
+        if (controller.signal.aborted) return;
         if (json.paths) {
           setData(json);
-          setTimeout(() => setStep(0), 500);
+          startTimer = setTimeout(() => setStep(0), 500);
         }
-      }).catch((e) => console.error(e));
+      }).catch((e) => { if (e.name !== "AbortError") console.error(e); });
+    return () => { controller.abort(); if (startTimer) clearTimeout(startTimer); };
   }, [jsonUrl]);
 
   useEffect(() => {
