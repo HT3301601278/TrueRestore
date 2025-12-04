@@ -21,6 +21,7 @@ const DEFAULT_CONFIG = {
   delay: 100,       // 笔画间停顿 (ms)
   loopDelay: 2000,  // 写完后停留多久开始擦除 (ms)
   eraseDelay: 500,  // 擦除完停留多久开始重写 (ms)
+  fontColor: null,  // 笔迹颜色，为 null 时使用路径定义的颜色。
 };
 
 const AnimatedPath = ({ d, color, index, currentStep, direction, recordedStrokeData, config }) => {
@@ -183,7 +184,7 @@ const SignaturePlayer = ({ jsonUrl, options = {} }) => {
         currentStep: step,
         direction: direction,
         d: path.d,
-        color: path.color,
+        color: config.fontColor || path.color,
         recordedStrokeData: data.recordedStrokes?.[path.id],
         config: config
       })
